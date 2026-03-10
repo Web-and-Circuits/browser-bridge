@@ -6,39 +6,79 @@
 <title>Browser Bridge</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
+
   body {
     font: 13px/1.5 -apple-system, system-ui, sans-serif;
     color: #222;
     background: #fff;
+    height: 100vh;
+    overflow: hidden;
   }
 
-  /* ── Welcome screen ── */
+  /* ── Welcome / Matrix screen ── */
   #welcome {
-    padding: 32px 20px;
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    background: #000;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    align-items: center;
+    justify-content: flex-end;
+    padding-bottom: 48px;
   }
-  #welcome h1 { font-size: 15px; font-weight: 600; }
-  #welcome p  { font-size: 12px; color: #555; line-height: 1.6; }
-  #welcome code {
+
+  #matrix-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  #welcome-ui {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    opacity: 0;
+    transition: opacity 0.8s ease;
+  }
+  #welcome-ui.visible { opacity: 1; }
+
+  #welcome-title {
     font-family: ui-monospace, monospace;
-    background: #f4f4f4;
-    padding: 1px 5px;
-    border-radius: 4px;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    color: #00ff41;
+    text-transform: uppercase;
+    opacity: 0.7;
   }
+
   #grant-btn {
-    padding: 10px 16px;
-    border-radius: 8px;
-    border: none;
-    background: #111;
-    color: #fff;
+    padding: 11px 28px;
+    border-radius: 6px;
+    border: 1px solid #00ff41;
+    background: transparent;
+    color: #00ff41;
+    font-family: ui-monospace, monospace;
     font-size: 13px;
+    letter-spacing: 0.1em;
     cursor: pointer;
-    align-self: flex-start;
+    transition: background 0.2s, color 0.2s;
   }
-  #grant-btn:hover { background: #333; }
-  #welcome-error { font-size: 11px; color: #c62828; }
+  #grant-btn:hover {
+    background: #00ff41;
+    color: #000;
+  }
+
+  #welcome-error {
+    font-family: ui-monospace, monospace;
+    font-size: 10px;
+    color: #ff4444;
+    letter-spacing: 0.05em;
+  }
 
   /* ── Active screen ── */
   #active {
@@ -49,7 +89,7 @@
   #active.visible { display: flex; }
 
   #header {
-    padding: 12px 14px 10px;
+    padding: 11px 14px 10px;
     border-bottom: 1px solid #eee;
     display: flex;
     align-items: center;
@@ -68,11 +108,11 @@
   #status-text { font-size: 12px; color: #555; flex: 1; }
   #reset-link {
     font-size: 10px;
-    color: #bbb;
+    color: #ddd;
     cursor: pointer;
     text-decoration: underline;
   }
-  #reset-link:hover { color: #888; }
+  #reset-link:hover { color: #999; }
 
   #log {
     flex: 1;
@@ -84,25 +124,24 @@
     font-size: 11px;
     font-family: ui-monospace, monospace;
   }
-  .log-entry     { color: #888; }
+  .log-entry     { color: #aaa; }
   .log-entry.ok  { color: #2e7d32; }
   .log-entry.err { color: #c62828; }
 </style>
 </head>
 <body>
 
-  <!-- First-run welcome -->
+  <!-- Welcome / Matrix -->
   <div id="welcome">
-    <h1>Browser Bridge</h1>
-    <p>
-      Lets a local agent talk to this tab through files on disk.<br>
-      One-time setup: grant read/write access to <code>~/.browser-bridge</code>.
-    </p>
-    <button id="grant-btn">Grant access →</button>
-    <div id="welcome-error"></div>
+    <canvas id="matrix-canvas"></canvas>
+    <div id="welcome-ui">
+      <div id="welcome-title">browser bridge</div>
+      <button id="grant-btn">Let's begin</button>
+      <div id="welcome-error"></div>
+    </div>
   </div>
 
-  <!-- Active state -->
+  <!-- Active -->
   <div id="active">
     <div id="header">
       <div class="dot" id="dot"></div>
@@ -111,6 +150,57 @@
     </div>
     <div id="log"></div>
   </div>
+
+  <script>
+    // ── Matrix rain ─────────────────────────────────────────────────────────
+    const canvas  = document.getElementById('matrix-canvas');
+    const ctx     = canvas.getContext('2d');
+    const CHARS   = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&<>[]{}|\\/.,:;~`^*+-=';
+    const FONT_SZ = 12;
+    let cols, drops, animId;
+
+    function initMatrix() {
+      canvas.width  = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+      cols  = Math.floor(canvas.width / FONT_SZ);
+      drops = Array.from({ length: cols }, () => Math.random() * -40 | 0);
+    }
+
+    function drawMatrix() {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.font = FONT_SZ + 'px ui-monospace, monospace';
+
+      for (let i = 0; i < drops.length; i++) {
+        const char = CHARS[Math.random() * CHARS.length | 0];
+        const y    = drops[i] * FONT_SZ;
+        // Head: bright white-green
+        ctx.fillStyle = drops[i] > 2 ? '#00ff41' : '#ccffcc';
+        // Occasionally dim a character for depth
+        if (Math.random() > 0.9) ctx.fillStyle = '#005f1a';
+        ctx.fillText(char, i * FONT_SZ, y);
+
+        if (y > canvas.height && Math.random() > 0.975) drops[i] = 0;
+        drops[i] += 0.5;
+      }
+
+      animId = requestAnimationFrame(drawMatrix);
+    }
+
+    function stopMatrix() {
+      cancelAnimationFrame(animId);
+    }
+
+    initMatrix();
+    new ResizeObserver(initMatrix).observe(canvas);
+
+    // Fade in the button after 1.8s
+    setTimeout(() => {
+      document.getElementById('welcome-ui').classList.add('visible');
+    }, 1800);
+
+    drawMatrix();
+  </script>
 
   <script src="sidepanel.js" type="module"></script>
 </body>

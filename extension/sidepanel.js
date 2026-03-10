@@ -77,6 +77,7 @@ function showWelcome() {
 }
 
 function showActive() {
+  if (typeof stopMatrix === 'function') stopMatrix();
   welcomeEl.style.display = 'none';
   activeEl.classList.add('visible');
 }
