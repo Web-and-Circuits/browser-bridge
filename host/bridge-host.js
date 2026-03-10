@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
@@ -195,16 +195,7 @@ async function archive(inflightPath, name) {
   }
 }
 
-// Prune archive when it exceeds 200 files
-async function pruneArchive() {
-  try {
-    const files = (await readdir(ARCHIVE)).sort();
-    if (files.length > 200) {
-      const toRemove = files.slice(0, files.length - 200);
-      await Promise.all(toRemove.map(f => rm(join(ARCHIVE, f), { force: true })));
-    }
-  } catch {}
-}
+
 
 async function claim() {
   const names = (await readdir(REQUESTS)).filter(n => n.endsWith('.json')).sort();
@@ -244,12 +235,10 @@ async function handle(name) {
   await archive(path, name);
 }
 
-let pruneCounter = 0;
 async function loop() {
   await ensureDirs();
   while (true) {
     for (const name of await claim()) await handle(name);
-    if (++pruneCounter % 200 === 0) await pruneArchive(); // every ~60s
     await new Promise(r => setTimeout(r, 300));
   }
 }
