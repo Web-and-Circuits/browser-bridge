@@ -1,97 +1,31 @@
 import { stopMatrix } from './matrix.js';
 
-const POLL_MS = 300;
-const DB_NAME = 'browser-bridge';
-const DB_STORE = 'handles';
-
-const welcomeEl   = document.getElementById('welcome');
-const activeEl    = document.getElementById('active');
-const grantBtn    = document.getElementById('grant-btn');
-const resumeBtn   = document.getElementById('resume-btn');
-const welcomeErr  = document.getElementById('welcome-error');
-const dot         = document.getElementById('dot');
-const statusText  = document.getElementById('status-text');
-const resetLink      = document.getElementById('reset-link');
-const resetConfirm   = document.getElementById('reset-confirm');
-const resetCancel    = document.getElementById('reset-cancel');
-const resetOk        = document.getElementById('reset-ok');
-const logEl          = document.getElementById('log');
-
-let rootHandle = null;
-let pollTimer  = null;
-const processing = new Set();
-
-// ── IndexedDB ──────────────────────────────────────────────────────────────
-
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = e => e.target.result.createObjectStore(DB_STORE);
-    req.onsuccess = e => resolve(e.target.result);
-    req.onerror   = e => reject(e.target.error);
-  });
-}
-
-async function saveHandle(handle) {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(DB_STORE, 'readwrite');
-    tx.objectStore(DB_STORE).put(handle, 'root');
-    tx.oncomplete = resolve;
-    tx.onerror    = e => reject(e.target.error);
-  });
-}
-
-async function loadHandle() {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx  = db.transaction(DB_STORE, 'readonly');
-    const req = tx.objectStore(DB_STORE).get('root');
-    req.onsuccess = e => resolve(e.target.result ?? null);
-    req.onerror   = e => reject(e.target.error);
-  });
-}
-
-async function clearHandle() {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(DB_STORE, 'readwrite');
-    tx.objectStore(DB_STORE).clear();
-    tx.oncomplete = resolve;
-    tx.onerror    = e => reject(e.target.error);
-  });
-}
-
-// ── File helpers ───────────────────────────────────────────────────────────
-
-async function getSubdir(root, name) {
-  return root.getDirectoryHandle(name, { create: true });
-}
-
-async function writeJson(dir, name, data) {
-  const fh = await dir.getFileHandle(name, { create: true });
-  const w  = await fh.createWritable();
-  await w.write(JSON.stringify(data, null, 2) + '\n');
-  await w.close();
-}
+const waitingEl  = document.getElementById('waiting');
+const waitingUI  = document.getElementById('waiting-ui');
+const activeEl   = document.getElementById('active');
+const dot        = document.getElementById('dot');
+const statusText = document.getElementById('status-text');
+const logEl      = document.getElementById('log');
 
 // ── UI ─────────────────────────────────────────────────────────────────────
 
-function showWelcome() {
-  welcomeEl.style.display = '';
+function showWaiting() {
   activeEl.classList.remove('visible');
+  waitingEl.style.display = '';
 }
 
 function showActive() {
   stopMatrix();
-  welcomeEl.style.display = 'none';
+  waitingEl.style.display = 'none';
   activeEl.classList.add('visible');
 }
 
 function setStatus(state, text) {
-  dot.className   = 'dot ' + state;
+  dot.className      = 'dot ' + state;
   statusText.textContent = text;
 }
+
+// ── Log ────────────────────────────────────────────────────────────────────
 
 const TALLY = ['', '|', '||', '|||', '||||', '|||| |', '|||| ||', '|||| |||', '|||| ||||'];
 function tally(n) {
@@ -110,236 +44,47 @@ function log(msg, kind = '') {
     return;
   }
   const el = document.createElement('div');
-  el.className      = 'log-entry ' + kind;
-  el.dataset.msg    = msg;
-  el.dataset.count  = '1';
-  el.textContent    = new Date().toLocaleTimeString() + '  ' + msg;
+  el.className     = 'log-entry ' + kind;
+  el.dataset.msg   = msg;
+  el.dataset.count = '1';
+  el.textContent   = new Date().toLocaleTimeString() + '  ' + msg;
   logEl.prepend(el);
   while (logEl.children.length > 200) logEl.lastChild.remove();
 }
 
-// ── Background bridge ──────────────────────────────────────────────────────
+// ── Background messages ────────────────────────────────────────────────────
 
-function sendToBackground(request) {
-  return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage({ kind: 'request', request }, response => {
-      if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
-      resolve(response);
-    });
-  });
-}
-
-// ── Poll loop ──────────────────────────────────────────────────────────────
-
-async function poll() {
-  try {
-    const requestsDir  = await getSubdir(rootHandle, 'requests');
-    const responsesDir = await getSubdir(rootHandle, 'responses');
-
-    const found = [];
-    for await (const [name] of requestsDir) found.push(name);
-
-    if (found.length) log(`requests/: ${found.join(', ')}`);
-
-    for (const name of found) {
-      if (!name.endsWith('.json') || processing.has(name)) continue;
-      processing.add(name);
-      setStatus('active', 'processing…');
-      log('← ' + name);
-
-      try {
-        const fh      = await requestsDir.getFileHandle(name);
-        const file    = await fh.getFile();
-        const request = JSON.parse(await file.text());
-        const response = await sendToBackground(request);
-
-        await writeJson(responsesDir, name, response);
-        await requestsDir.removeEntry(name);
-        log('→ ' + name + '  ok=' + response.ok, response.ok ? 'ok' : 'err');
-      } catch (err) {
-        log('✕ ' + name + '  ' + err.message, 'err');
-        try {
-          await writeJson(responsesDir, name, {
-            id: name.replace('.json', ''),
-            ok: false,
-            createdAt: new Date().toISOString(),
-            result: null,
-            error: { message: err.message, code: 'SIDEPANEL_ERROR' }
-          });
-          await requestsDir.removeEntry(name).catch(() => {});
-        } catch {}
-      } finally {
-        processing.delete(name);
-        setStatus('ready', 'listening');
-      }
-    }
-  } catch (err) {
-    setStatus('error', err.message);
-  }
-
-  pollTimer = setTimeout(poll, POLL_MS);
-}
-
-function startPolling() {
-  if (pollTimer) clearTimeout(pollTimer);
-  poll();
-}
-
-// ── Self-test ──────────────────────────────────────────────────────────────
-
-async function selfTest(root) {
-  const TEST = '__bridge-test.json';
-  const payload = { ok: true, ts: Date.now() };
-
-  // write
-  let writeOk = false;
-  try {
-    await writeJson(root, TEST, payload);
-    writeOk = true;
-    log('write: ok', 'ok');
-  } catch (err) {
-    log('write: failed — ' + err.message, 'err');
-    return false;
-  }
-
-  // read back
-  try {
-    const fh   = await root.getFileHandle(TEST);
-    const file  = await fh.getFile();
-    const data  = JSON.parse(await file.text());
-    if (data.ts === payload.ts) {
-      log('read:  ok', 'ok');
+chrome.runtime.onMessage.addListener(msg => {
+  if (msg.kind === 'status') {
+    if (msg.connected) {
+      showActive();
+      setStatus('connected', 'connected');
+      log('host connected', 'ok');
     } else {
-      log('read:  stale data', 'err');
-      return false;
+      setStatus('disconnected', 'host disconnected — retrying…');
+      log('host disconnected', 'err');
     }
-  } catch (err) {
-    log('read:  failed — ' + err.message, 'err');
-    return false;
   }
 
-  // cleanup
-  try { await root.removeEntry(TEST); } catch {}
-
-  // test: seed a file via FSA, wait for external modification, read it back
-  try {
-    const seed = { seq: 0, source: 'extension' };
-    await writeJson(root, 'inbox.json', seed);
-    const inboxFh = await root.getFileHandle('inbox.json');
-    log('inbox.json seeded — overwrite it to confirm external read', 'ok');
-
-    // poll for up to 15s watching for external modification
-    const deadline = Date.now() + 15000;
-    let detected = false;
-    while (Date.now() < deadline) {
-      await new Promise(r => setTimeout(r, 500));
-      const file = await inboxFh.getFile();
-      const data = JSON.parse(await file.text());
-      if (data.seq !== seed.seq) {
-        log('external modify: ok — seq=' + data.seq, 'ok');
-        detected = true;
-        break;
-      }
-    }
-    if (!detected) log('external modify: timeout (15s) — no change detected', 'err');
-    await root.removeEntry('inbox.json').catch(() => {});
-  } catch (err) {
-    log('inbox test: ' + err.message, 'err');
-  }
-
-  return true;
-}
-
-// ── Activate ───────────────────────────────────────────────────────────────
-
-async function activate(handle) {
-  rootHandle = handle;
-  await getSubdir(handle, 'requests');
-  await getSubdir(handle, 'responses');
-  showActive();
-  setStatus('checking', 'self-test…');
-
-  const ok = await selfTest(handle);
-  if (!ok) {
-    setStatus('error', 'file access failed — check permissions');
-    return;
-  }
-
-  setStatus('ready', 'listening — ' + handle.name);
-  startPolling();
-}
-
-// ── Grant button (first run) ───────────────────────────────────────────────
-
-grantBtn.addEventListener('click', async () => {
-  welcomeErr.textContent = '';
-  try {
-    const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
-    await saveHandle(handle);
-    await activate(handle);
-    log('ready — ' + handle.name, 'ok');
-  } catch (err) {
-    if (err.name !== 'AbortError') {
-      welcomeErr.textContent = err.message;
-    }
+  if (msg.kind === 'activity') {
+    const label = msg.action + ' → ' + (msg.ok ? 'ok' : 'err');
+    log(label, msg.ok ? 'ok' : 'err');
+    setStatus('active', msg.action);
+    setTimeout(() => setStatus('connected', 'connected'), 800);
   }
 });
 
-// ── Reset (tucked away in corner) ─────────────────────────────────────────
+// ── Init ───────────────────────────────────────────────────────────────────
 
-resetLink.addEventListener('click', () => {
-  resetConfirm.classList.add('visible');
-});
-
-resetCancel.addEventListener('click', () => {
-  resetConfirm.classList.remove('visible');
-});
-
-resetOk.addEventListener('click', async () => {
-  resetConfirm.classList.remove('visible');
-  clearTimeout(pollTimer);
-  await clearHandle();
-  rootHandle = null;
-  logEl.innerHTML = '';
-  showWelcome();
-});
-
-// ── Resume button (re-permission after reload) ─────────────────────────────
-
-let savedHandleForResume = null;
-
-resumeBtn.addEventListener('click', async () => {
-  if (!savedHandleForResume) return;
-  try {
-    const perm = await savedHandleForResume.requestPermission({ mode: 'readwrite' });
-    if (perm === 'granted') {
-      await activate(savedHandleForResume);
-      log('resumed — ' + savedHandleForResume.name, 'ok');
-    }
-  } catch (err) {
-    welcomeErr.textContent = err.message;
+chrome.runtime.sendMessage({ kind: 'getStatus' }, response => {
+  if (chrome.runtime.lastError) return;
+  if (response?.connected) {
+    showActive();
+    setStatus('connected', 'connected');
+  } else {
+    showWaiting();
   }
 });
 
-// ── Init — restore saved handle ────────────────────────────────────────────
-
-(async () => {
-  try {
-    const saved = await loadHandle();
-    if (saved) {
-      const perm = await saved.queryPermission({ mode: 'readwrite' });
-      if (perm === 'granted') {
-        await activate(saved);
-        log('restored — ' + saved.name, 'ok');
-        return;
-      }
-      // Have a handle but need a user gesture to re-grant — show Resume
-      savedHandleForResume = saved;
-      grantBtn.style.display = 'none';
-      resumeBtn.style.display = '';
-      document.getElementById('welcome-hint').textContent = 'click to reconnect to ' + saved.name;
-      return;
-    }
-  } catch {}
-  showWelcome();
-})();
+// fade in waiting UI after matrix has a moment to run
+setTimeout(() => waitingUI.classList.add('visible'), 1800);

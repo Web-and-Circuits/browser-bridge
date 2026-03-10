@@ -1,7 +1,21 @@
-// Open side panel when extension icon is clicked
+const HOST = 'com.webandcircuits.browser_bridge';
+
+let port      = null;
+let connected = false;
+
+// ── Side panel opener ──────────────────────────────────────────────────────
+
 chrome.action.onClicked.addListener(tab => {
   chrome.sidePanel.open({ windowId: tab.windowId });
 });
+
+// ── Broadcast to side panel (best-effort) ─────────────────────────────────
+
+function broadcast(msg) {
+  chrome.runtime.sendMessage(msg).catch(() => {});
+}
+
+// ── Tab operations ─────────────────────────────────────────────────────────
 
 function wrapResponse(id, payload) {
   return {
@@ -40,13 +54,46 @@ async function handleRequest(request) {
     return wrapResponse(request.id, response);
   }
 
-  return wrapResponse(request.id, { ok: false, error: { message: 'Unsupported action', code: 'UNSUPPORTED_ACTION' } });
+  return wrapResponse(request.id, {
+    ok: false,
+    error: { message: 'Unsupported action', code: 'UNSUPPORTED_ACTION' }
+  });
 }
 
-// Side panel sends requests here for tab-level operations
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message.kind === 'request' && message.request) {
-    handleRequest(message.request).then(sendResponse);
-    return true; // keep channel open for async response
+// ── Native messaging ───────────────────────────────────────────────────────
+
+function connect() {
+  try {
+    port = chrome.runtime.connectNative(HOST);
+    connected = true;
+    broadcast({ kind: 'status', connected: true });
+
+    port.onMessage.addListener(async msg => {
+      if (!msg || msg.kind !== 'request' || !msg.request) return;
+      const response = await handleRequest(msg.request);
+      port.postMessage({ kind: 'response', response });
+      broadcast({ kind: 'activity', action: msg.request.action, id: msg.request.id, ok: response.ok });
+    });
+
+    port.onDisconnect.addListener(() => {
+      connected = false;
+      port = null;
+      broadcast({ kind: 'status', connected: false });
+      setTimeout(connect, 3000);
+    });
+  } catch {
+    connected = false;
+    setTimeout(connect, 3000);
+  }
+}
+
+// ── Message handler (from side panel) ─────────────────────────────────────
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg.kind === 'getStatus') {
+    sendResponse({ connected });
+    return;
   }
 });
+
+connect();

@@ -15,8 +15,8 @@
     overflow: hidden;
   }
 
-  /* ── Welcome / Matrix screen ── */
-  #welcome {
+  /* ── Waiting screen ── */
+  #waiting {
     position: relative;
     width: 100%;
     height: 100vh;
@@ -27,27 +27,24 @@
     justify-content: flex-end;
     padding-bottom: 48px;
   }
-
   #matrix-canvas {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
   }
-
-  #welcome-ui {
+  #waiting-ui {
     position: relative;
     z-index: 10;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 20px;
+    gap: 12px;
     opacity: 0;
     transition: opacity 0.8s ease;
   }
-  #welcome-ui.visible { opacity: 1; }
-
-  #welcome-title {
+  #waiting-ui.visible { opacity: 1; }
+  #waiting-title {
     font-family: ui-monospace, monospace;
     font-size: 11px;
     letter-spacing: 0.2em;
@@ -55,50 +52,11 @@
     text-transform: uppercase;
     opacity: 0.7;
   }
-  #welcome-hint {
+  #waiting-status {
     font-family: ui-monospace, monospace;
-    font-size: 10px;
+    font-size: 11px;
     color: #00ff41;
-    opacity: 0.45;
-    text-align: center;
-    line-height: 1.6;
-  }
-  #welcome-hint code {
-    opacity: 0.9;
-  }
-
-  #resume-btn {
-    padding: 11px 28px;
-    border-radius: 6px;
-    border: 1px solid #00ff41;
-    background: #00ff41;
-    color: #000;
-    font-family: ui-monospace, monospace;
-    font-size: 13px;
-    letter-spacing: 0.1em;
-    cursor: pointer;
-  }
-  #grant-btn {
-    padding: 11px 28px;
-    border-radius: 6px;
-    border: 1px solid #00ff41;
-    background: transparent;
-    color: #00ff41;
-    font-family: ui-monospace, monospace;
-    font-size: 13px;
-    letter-spacing: 0.1em;
-    cursor: pointer;
-    transition: background 0.2s, color 0.2s;
-  }
-  #grant-btn:hover {
-    background: #00ff41;
-    color: #000;
-  }
-
-  #welcome-error {
-    font-family: ui-monospace, monospace;
-    font-size: 10px;
-    color: #ff4444;
+    opacity: 0.5;
     letter-spacing: 0.05em;
   }
 
@@ -120,49 +78,13 @@
   .dot {
     width: 7px; height: 7px;
     border-radius: 50%;
-    background: #ccc;
     flex-shrink: 0;
     transition: background 0.2s;
   }
-  .dot.ready    { background: #4caf50; }
-  .dot.active   { background: #2196f3; }
-  .dot.error    { background: #f44336; }
-  .dot.checking { background: #ff9800; }
-  #status-text { font-size: 12px; color: #555; flex: 1; }
-  #reset-link {
-    font-size: 10px;
-    color: #ddd;
-    cursor: pointer;
-    text-decoration: underline;
-  }
-  #reset-link:hover { color: #999; }
-
-  #reset-confirm {
-    display: none;
-    position: absolute;
-    bottom: 0; left: 0; right: 0;
-    background: #fff;
-    border-top: 1px solid #eee;
-    padding: 12px 14px;
-    font-size: 12px;
-    gap: 10px;
-    align-items: center;
-  }
-  #reset-confirm.visible { display: flex; }
-  #reset-confirm span { flex: 1; color: #555; }
-  #reset-confirm button {
-    padding: 4px 10px;
-    border-radius: 5px;
-    border: 1px solid #ccc;
-    background: #fff;
-    font-size: 11px;
-    cursor: pointer;
-  }
-  #reset-confirm button.danger {
-    background: #c62828;
-    color: #fff;
-    border-color: #c62828;
-  }
+  .dot.connected    { background: #4caf50; }
+  .dot.active       { background: #2196f3; }
+  .dot.disconnected { background: #f44336; }
+  #status-text { font-size: 12px; color: #555; }
 
   #log {
     flex: 1;
@@ -181,15 +103,12 @@
 </head>
 <body>
 
-  <!-- Welcome / Matrix -->
-  <div id="welcome">
+  <!-- Waiting for host -->
+  <div id="waiting">
     <canvas id="matrix-canvas"></canvas>
-    <div id="welcome-ui">
-      <div id="welcome-title">browser bridge</div>
-      <div id="welcome-hint" id="welcome-hint">select a folder — once, never again</div>
-      <button id="grant-btn">Let's begin</button>
-      <button id="resume-btn" style="display:none">Resume</button>
-      <div id="welcome-error"></div>
+    <div id="waiting-ui">
+      <div id="waiting-title">browser bridge</div>
+      <div id="waiting-status">waiting for host…</div>
     </div>
   </div>
 
@@ -197,15 +116,9 @@
   <div id="active">
     <div id="header">
       <div class="dot" id="dot"></div>
-      <span id="status-text">Starting…</span>
-      <span id="reset-link">reset</span>
+      <span id="status-text">connected</span>
     </div>
     <div id="log"></div>
-    <div id="reset-confirm">
-      <span>Clear directory and reset?</span>
-      <button id="reset-cancel">Cancel</button>
-      <button id="reset-ok" class="danger">Reset</button>
-    </div>
   </div>
 
   <script src="matrix.js" type="module"></script>
