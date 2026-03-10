@@ -99,6 +99,23 @@
   }
   #active.visible { display: flex; }
 
+  /* ── Bridge toggle ── */
+  #bridge-toggle {
+    width: 100%;
+    padding: 11px 0;
+    font: 700 12px/1 ui-monospace, monospace;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-align: center;
+    cursor: pointer;
+    border: none;
+    outline: none;
+    flex-shrink: 0;
+    transition: background 0.15s, color 0.15s;
+  }
+  #bridge-toggle.on  { background: #00c853; color: #fff; }
+  #bridge-toggle.off { background: #bdbdbd; color: #fff; }
+
   #header {
     padding: 11px 14px 10px;
     border-bottom: 1px solid #eee;
@@ -320,6 +337,7 @@
 
   <!-- Active -->
   <div id="active">
+    <button id="bridge-toggle" class="on" aria-pressed="true">● BRIDGE ON</button>
     <div id="header">
       <div class="dot" id="dot"></div>
       <span id="status-text">connected</span>

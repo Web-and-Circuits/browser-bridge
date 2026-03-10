@@ -1,14 +1,34 @@
 import { stopMatrix } from './matrix.js';
 
-const waitingEl  = document.getElementById('waiting');
-const waitingUI  = document.getElementById('waiting-ui');
-const activeEl   = document.getElementById('active');
-const dot        = document.getElementById('dot');
-const statusText = document.getElementById('status-text');
-const logEl      = document.getElementById('log');
-const modeDetail = document.getElementById('session-detail');
+const waitingEl   = document.getElementById('waiting');
+const waitingUI   = document.getElementById('waiting-ui');
+const activeEl    = document.getElementById('active');
+const dot         = document.getElementById('dot');
+const statusText  = document.getElementById('status-text');
+const logEl       = document.getElementById('log');
+const modeDetail  = document.getElementById('session-detail');
 const promptInput = document.getElementById('prompt-input');
 const promptSend  = document.getElementById('prompt-send');
+const toggleBtn   = document.getElementById('bridge-toggle');
+
+// ── Persistent port — background uses this to know sidebar is open ─────────
+const bgPort = chrome.runtime.connect({ name: 'sidepanel' });
+
+// ── Bridge toggle ──────────────────────────────────────────────────────────
+
+let bridgeEnabled = true;
+
+function setToggle(on) {
+  bridgeEnabled = on;
+  toggleBtn.className = on ? 'on' : 'off';
+  toggleBtn.textContent = on ? '● BRIDGE ON' : '○ BRIDGE OFF';
+  toggleBtn.setAttribute('aria-pressed', String(on));
+}
+
+toggleBtn.addEventListener('click', () => {
+  setToggle(!bridgeEnabled);
+  bgPort.postMessage({ kind: 'setEnabled', enabled: bridgeEnabled });
+});
 
 // ── UI helpers ─────────────────────────────────────────────────────────────
 
@@ -52,7 +72,7 @@ function renderModeDetail() {
       reset.title = 'clear session (start fresh)';
       reset.addEventListener('click', () => {
         sessionId = null;
-        chrome.runtime.sendMessage({ kind: 'reset-session' });
+        bgPort.postMessage({ kind: 'reset-session' });
         renderModeDetail();
       });
 
@@ -206,7 +226,7 @@ function submitPrompt() {
   setStatus('active', 'claude');
   startStream(id, message);
 
-  chrome.runtime.sendMessage({
+  bgPort.postMessage({
     kind: 'prompt',
     id,
     message,

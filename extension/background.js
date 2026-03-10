@@ -1,7 +1,9 @@
 const HOST = 'com.webandcircuits.browser_bridge';
 
-let port      = null;
-let connected = false;
+let port        = null;
+let connected   = false;
+let enabled     = true;   // bridge on/off
+let sidebarPort = null;   // persistent port from sidepanel — null = sidebar closed
 
 // ── Side panel opener ──────────────────────────────────────────────────────
 
@@ -9,11 +11,35 @@ chrome.action.onClicked.addListener(tab => {
   chrome.sidePanel.open({ windowId: tab.windowId });
 });
 
-// ── Broadcast to side panel (best-effort) ─────────────────────────────────
+// ── Broadcast (one-to-many, best-effort) ──────────────────────────────────
 
 function broadcast(msg) {
   chrome.runtime.sendMessage(msg).catch(() => {});
 }
+
+// ── Sidebar port (tracks open/closed state) ───────────────────────────────
+
+chrome.runtime.onConnect.addListener(p => {
+  if (p.name !== 'sidepanel') return;
+  sidebarPort = p;
+
+  p.onDisconnect.addListener(() => {
+    if (sidebarPort === p) sidebarPort = null;
+  });
+
+  p.onMessage.addListener(msg => {
+    if (msg.kind === 'setEnabled') {
+      enabled = msg.enabled;
+      broadcast({ kind: 'enabledState', enabled });
+    }
+    if (msg.kind === 'reset-session' && port) {
+      port.postMessage({ kind: 'reset-session' });
+    }
+    if (msg.kind === 'prompt' && port) {
+      port.postMessage({ kind: 'prompt', id: msg.id, message: msg.message, mode: msg.mode, resumeId: msg.resumeId });
+    }
+  });
+});
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -25,6 +51,14 @@ function wrapResponse(id, payload) {
     result: payload?.ok ? payload.result ?? null : null,
     error:  payload?.ok ? null : (payload?.error ?? { message: 'Unknown error' })
   };
+}
+
+function disabledResponse(id) {
+  return wrapResponse(id, { ok: false, error: { message: 'Bridge is off', code: 'BRIDGE_DISABLED' } });
+}
+
+function sidebarClosedResponse(id) {
+  return wrapResponse(id, { ok: false, error: { message: 'Sidebar is closed', code: 'SIDEBAR_CLOSED' } });
 }
 
 async function getActiveTab() {
@@ -94,9 +128,10 @@ async function handleRequest(request) {
       (sel, val) => {
         const el = document.querySelector(sel);
         if (!el) return { ok: false, message: `No element: ${sel}` };
-        const nativeInputSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
-          || Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
-        if (nativeInputSetter) nativeInputSetter.call(el, val);
+        const nativeSetter =
+          Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,  'value')?.set ||
+          Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+        if (nativeSetter) nativeSetter.call(el, val);
         else el.value = val;
         el.dispatchEvent(new Event('input',  { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -128,20 +163,30 @@ function connect() {
     port.onMessage.addListener(async msg => {
       if (!msg) return;
 
-      if (msg.kind === 'stream' || msg.kind === 'stream-end') {
+      // Stream events pass through to sidebar regardless of enabled state
+      if (msg.kind === 'stream' || msg.kind === 'stream-end' || msg.kind === 'session-id') {
         broadcast(msg);
         return;
       }
 
-      if (!msg.request || msg.kind !== 'request') return;
+      if (msg.kind !== 'request' || !msg.request) return;
+
+      // Gate: must be enabled AND sidebar open
       let response;
-      try {
-        response = await handleRequest(msg.request);
-      } catch (err) {
-        response = wrapResponse(msg.request.id, {
-          ok: false, error: { message: err.message, code: 'BACKGROUND_ERROR' }
-        });
+      if (!enabled) {
+        response = disabledResponse(msg.request.id);
+      } else if (!sidebarPort) {
+        response = sidebarClosedResponse(msg.request.id);
+      } else {
+        try {
+          response = await handleRequest(msg.request);
+        } catch (err) {
+          response = wrapResponse(msg.request.id, {
+            ok: false, error: { message: err.message, code: 'BACKGROUND_ERROR' }
+          });
+        }
       }
+
       port.postMessage({ kind: 'response', response });
       broadcast({ kind: 'activity', action: msg.request.action, id: msg.request.id, ok: response.ok });
     });
@@ -158,18 +203,11 @@ function connect() {
   }
 }
 
-// ── Message handler (from side panel) ─────────────────────────────────────
+// ── Message handler (legacy one-way, from non-port senders) ───────────────
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.kind === 'getStatus') {
-    sendResponse({ connected });
-    return;
-  }
-  if (msg.kind === 'prompt' && port) {
-    port.postMessage({ kind: 'prompt', id: msg.id, message: msg.message, mode: msg.mode, resumeId: msg.resumeId });
-  }
-  if (msg.kind === 'reset-session' && port) {
-    port.postMessage({ kind: 'reset-session' });
+    sendResponse({ connected, enabled, sidebarOpen: !!sidebarPort });
   }
 });
 
