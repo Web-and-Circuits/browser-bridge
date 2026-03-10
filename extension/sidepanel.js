@@ -91,9 +91,14 @@ chrome.runtime.sendMessage({ kind: 'getStatus' }, response => {
   }
 });
 
-// Populate install command with real extension ID
+// Populate extension ID and install command in both screens
+const id = chrome.runtime.id;
 const cmdEl = document.getElementById('waiting-cmd');
-if (cmdEl) cmdEl.textContent = `./install.sh ${chrome.runtime.id}`;
+if (cmdEl) cmdEl.textContent = `./install.sh ${id}`;
+const extIdEl = document.getElementById('ext-id');
+if (extIdEl) extIdEl.textContent = id;
+const installCmdEl = document.getElementById('install-cmd');
+if (installCmdEl) installCmdEl.textContent = `./install.sh ${id}`;
 
 // fade in waiting UI after matrix has a moment to run
 setTimeout(() => waitingUI.classList.add('visible'), 1800);

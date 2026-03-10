@@ -117,6 +117,32 @@
   .dot.disconnected { background: #f44336; }
   #status-text { font-size: 12px; color: #555; }
 
+  #setup {
+    padding: 8px 14px;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .setup-row {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    font-size: 10px;
+    font-family: ui-monospace, monospace;
+  }
+  .setup-label {
+    color: #bbb;
+    flex-shrink: 0;
+    width: 68px;
+  }
+  .setup-val {
+    color: #888;
+    word-break: break-all;
+  }
+  .selectable { user-select: all; cursor: text; }
+  .selectable:hover { color: #444; }
+
   #log {
     flex: 1;
     overflow-y: auto;
@@ -156,6 +182,16 @@
     <div id="header">
       <div class="dot" id="dot"></div>
       <span id="status-text">connected</span>
+    </div>
+    <div id="setup">
+      <div class="setup-row">
+        <span class="setup-label">extension id</span>
+        <span class="setup-val selectable" id="ext-id">—</span>
+      </div>
+      <div class="setup-row">
+        <span class="setup-label">install</span>
+        <span class="setup-val selectable" id="install-cmd">—</span>
+      </div>
     </div>
     <div id="log"></div>
   </div>
