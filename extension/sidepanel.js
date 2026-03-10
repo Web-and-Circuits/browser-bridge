@@ -7,6 +7,7 @@ const DB_STORE = 'handles';
 const welcomeEl   = document.getElementById('welcome');
 const activeEl    = document.getElementById('active');
 const grantBtn    = document.getElementById('grant-btn');
+const resumeBtn   = document.getElementById('resume-btn');
 const welcomeErr  = document.getElementById('welcome-error');
 const dot         = document.getElementById('dot');
 const statusText  = document.getElementById('status-text');
@@ -214,18 +215,41 @@ resetOk.addEventListener('click', async () => {
   showWelcome();
 });
 
+// ── Resume button (re-permission after reload) ─────────────────────────────
+
+let savedHandleForResume = null;
+
+resumeBtn.addEventListener('click', async () => {
+  if (!savedHandleForResume) return;
+  try {
+    const perm = await savedHandleForResume.requestPermission({ mode: 'readwrite' });
+    if (perm === 'granted') {
+      await activate(savedHandleForResume);
+      log('resumed — ' + savedHandleForResume.name, 'ok');
+    }
+  } catch (err) {
+    welcomeErr.textContent = err.message;
+  }
+});
+
 // ── Init — restore saved handle ────────────────────────────────────────────
 
 (async () => {
   try {
     const saved = await loadHandle();
     if (saved) {
-      const perm = await saved.requestPermission({ mode: 'readwrite' });
+      const perm = await saved.queryPermission({ mode: 'readwrite' });
       if (perm === 'granted') {
         await activate(saved);
         log('restored — ' + saved.name, 'ok');
         return;
       }
+      // Have a handle but need a user gesture to re-grant — show Resume
+      savedHandleForResume = saved;
+      grantBtn.style.display = 'none';
+      resumeBtn.style.display = '';
+      document.getElementById('welcome-hint').textContent = 'click to reconnect to ' + saved.name;
+      return;
     }
   } catch {}
   showWelcome();

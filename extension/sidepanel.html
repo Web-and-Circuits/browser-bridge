@@ -67,6 +67,17 @@
     opacity: 0.9;
   }
 
+  #resume-btn {
+    padding: 11px 28px;
+    border-radius: 6px;
+    border: 1px solid #00ff41;
+    background: #00ff41;
+    color: #000;
+    font-family: ui-monospace, monospace;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+  }
   #grant-btn {
     padding: 11px 28px;
     border-radius: 6px;
@@ -174,8 +185,9 @@
     <canvas id="matrix-canvas"></canvas>
     <div id="welcome-ui">
       <div id="welcome-title">browser bridge</div>
-      <div id="welcome-hint">select a folder — once, never again</div>
+      <div id="welcome-hint" id="welcome-hint">select a folder — once, never again</div>
       <button id="grant-btn">Let's begin</button>
+      <button id="resume-btn" style="display:none">Resume</button>
       <div id="welcome-error"></div>
     </div>
   </div>
