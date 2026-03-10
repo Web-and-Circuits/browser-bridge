@@ -1,0 +1,9 @@
+{
+  "id": "req-002",
+  "createdAt": "2026-03-10T04:00:05Z",
+  "target": "active-tab",
+  "action": "run_js",
+  "args": {
+    "code": "document.title"
+  }
+}

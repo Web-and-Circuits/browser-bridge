@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://webandcircuits.com/schemas/browser-bridge-request.schema.json",
+  "title": "BrowserBridgeRequest",
+  "type": "object",
+  "required": ["id", "createdAt", "target", "action", "args"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "createdAt": { "type": "string" },
+    "target": { "type": "string", "enum": ["active-tab"] },
+    "action": { "type": "string", "enum": ["ping", "get_active_tab", "snapshot", "run_js"] },
+    "args": { "type": "object" }
+  },
+  "additionalProperties": false
+}

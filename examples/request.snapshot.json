@@ -1,0 +1,7 @@
+{
+  "id": "req-001",
+  "createdAt": "2026-03-10T04:00:00Z",
+  "target": "active-tab",
+  "action": "snapshot",
+  "args": {}
+}

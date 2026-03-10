@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://webandcircuits.com/schemas/browser-bridge-response.schema.json",
+  "title": "BrowserBridgeResponse",
+  "type": "object",
+  "required": ["id", "ok", "createdAt", "result", "error"],
+  "properties": {
+    "id": { "type": "string" },
+    "ok": { "type": "boolean" },
+    "createdAt": { "type": "string" },
+    "result": {},
+    "error": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["message"],
+          "properties": {
+            "message": { "type": "string" },
+            "code": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,40 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp.*
+.yarn/
+
+# Runtime queue (never commit live request/response files)
+~/.browser-bridge/
+
+# Extension IDs are machine-specific — keep the template, not the live value
+# (Reminder: update allowed_origins in host/com.webandcircuits.browser_bridge.json
+#  with your actual extension ID before use — don't commit real IDs)
+
+# Host error logs
+host/state/
+state/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Env / secrets
+.env
+.env.*
+*.pem
+*.key
