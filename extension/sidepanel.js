@@ -93,10 +93,27 @@ function setStatus(state, text) {
   statusText.textContent = text;
 }
 
+const TALLY = ['', '|', '||', '|||', '||||', '|||| |', '|||| ||', '|||| |||', '|||| ||||'];
+function tally(n) {
+  if (n <= 1) return '';
+  const groups = Math.floor((n - 1) / 5);
+  const rem    = (n - 1) % 5;
+  return '  ' + '|||| '.repeat(groups) + TALLY[rem + 1];
+}
+
 function log(msg, kind = '') {
+  const first = logEl.firstChild;
+  if (first && first.dataset.msg === msg) {
+    const count = (parseInt(first.dataset.count, 10) || 1) + 1;
+    first.dataset.count = count;
+    first.textContent = new Date().toLocaleTimeString() + '  ' + msg + tally(count);
+    return;
+  }
   const el = document.createElement('div');
-  el.className   = 'log-entry ' + kind;
-  el.textContent = new Date().toLocaleTimeString() + '  ' + msg;
+  el.className      = 'log-entry ' + kind;
+  el.dataset.msg    = msg;
+  el.dataset.count  = '1';
+  el.textContent    = new Date().toLocaleTimeString() + '  ' + msg;
   logEl.prepend(el);
   while (logEl.children.length > 200) logEl.lastChild.remove();
 }
