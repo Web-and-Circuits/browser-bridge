@@ -5,11 +5,20 @@
   "type": "object",
   "required": ["id", "createdAt", "target", "action", "args"],
   "properties": {
-    "id": { "type": "string", "minLength": 1 },
+    "id":        { "type": "string", "minLength": 1 },
     "createdAt": { "type": "string" },
-    "target": { "type": "string", "enum": ["active-tab"] },
-    "action": { "type": "string", "enum": ["ping", "get_active_tab", "snapshot", "run_js"] },
-    "args": { "type": "object" }
+    "target":    { "type": "string", "enum": ["active-tab"] },
+    "action":    { "type": "string", "enum": ["ping", "get_active_tab", "snapshot", "run_js", "click", "fill", "navigate"] },
+    "args": {
+      "type": "object",
+      "properties": {
+        "code":     { "type": "string", "description": "JS expression for run_js" },
+        "selector": { "type": "string", "description": "CSS selector for click, fill, or snapshot scoping" },
+        "value":    { "type": "string", "description": "Value for fill" },
+        "url":      { "type": "string", "description": "URL for navigate" },
+        "mode":     { "type": "string", "enum": ["default", "forms"], "description": "Snapshot mode" }
+      }
+    }
   },
   "additionalProperties": false
 }

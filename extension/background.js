@@ -15,7 +15,7 @@ function broadcast(msg) {
   chrome.runtime.sendMessage(msg).catch(() => {});
 }
 
-// ── Tab operations ─────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────
 
 function wrapResponse(id, payload) {
   return {
@@ -23,7 +23,7 @@ function wrapResponse(id, payload) {
     ok: Boolean(payload?.ok),
     createdAt: new Date().toISOString(),
     result: payload?.ok ? payload.result ?? null : null,
-    error: payload?.ok ? null : (payload?.error ?? { message: 'Unknown error' })
+    error:  payload?.ok ? null : (payload?.error ?? { message: 'Unknown error' })
   };
 }
 
@@ -32,45 +32,89 @@ async function getActiveTab() {
   return tabs[0] || null;
 }
 
+function execInMain(tabId, func, args = []) {
+  return chrome.scripting.executeScript({
+    target: { tabId },
+    world: 'MAIN',
+    func,
+    args
+  }).then(r => r[0]?.result);
+}
+
+// ── Request handler ────────────────────────────────────────────────────────
+
 async function handleRequest(request) {
-  if (request.action === 'ping') {
-    return wrapResponse(request.id, { ok: true, result: { pong: true } });
+  const { id, action, args = {} } = request;
+
+  if (action === 'ping') {
+    return wrapResponse(id, { ok: true, result: { pong: true } });
   }
 
   const tab = await getActiveTab();
   if (!tab?.id) {
-    return wrapResponse(request.id, { ok: false, error: { message: 'No active tab', code: 'NO_ACTIVE_TAB' } });
+    return wrapResponse(id, { ok: false, error: { message: 'No active tab', code: 'NO_ACTIVE_TAB' } });
   }
 
-  if (request.action === 'get_active_tab') {
-    return wrapResponse(request.id, {
-      ok: true,
-      result: { tabId: tab.id, title: tab.title, url: tab.url }
-    });
+  if (action === 'get_active_tab') {
+    return wrapResponse(id, { ok: true, result: { tabId: tab.id, title: tab.title, url: tab.url } });
   }
 
-  if (request.action === 'snapshot') {
+  if (action === 'snapshot') {
     const response = await chrome.tabs.sendMessage(tab.id, request);
-    return wrapResponse(request.id, response);
+    return wrapResponse(id, response);
   }
 
-  if (request.action === 'run_js') {
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      world: 'MAIN',
-      func: code => { try { return { ok: true, value: eval(code) } } catch(e) { return { ok: false, message: e.message } } },
-      args: [request.args?.code || 'null']
-    });
-    const r = results[0]?.result;
+  if (action === 'run_js') {
+    const r = await execInMain(tab.id,
+      code => { try { return { ok: true, value: eval(code) } } catch(e) { return { ok: false, message: e.message } } },
+      [args.code || 'null']
+    );
     return r?.ok
-      ? wrapResponse(request.id, { ok: true, result: r.value })
-      : wrapResponse(request.id, { ok: false, error: { message: r?.message || 'eval failed' } });
+      ? wrapResponse(id, { ok: true, result: r.value })
+      : wrapResponse(id, { ok: false, error: { message: r?.message || 'eval failed' } });
   }
 
-  return wrapResponse(request.id, {
-    ok: false,
-    error: { message: 'Unsupported action', code: 'UNSUPPORTED_ACTION' }
-  });
+  if (action === 'click') {
+    const r = await execInMain(tab.id,
+      sel => {
+        const el = document.querySelector(sel);
+        if (!el) return { ok: false, message: `No element: ${sel}` };
+        el.click();
+        return { ok: true };
+      },
+      [args.selector]
+    );
+    return r?.ok
+      ? wrapResponse(id, { ok: true, result: { clicked: args.selector } })
+      : wrapResponse(id, { ok: false, error: { message: r?.message } });
+  }
+
+  if (action === 'fill') {
+    const r = await execInMain(tab.id,
+      (sel, val) => {
+        const el = document.querySelector(sel);
+        if (!el) return { ok: false, message: `No element: ${sel}` };
+        const nativeInputSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+          || Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+        if (nativeInputSetter) nativeInputSetter.call(el, val);
+        else el.value = val;
+        el.dispatchEvent(new Event('input',  { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        return { ok: true };
+      },
+      [args.selector, args.value]
+    );
+    return r?.ok
+      ? wrapResponse(id, { ok: true, result: { filled: args.selector } })
+      : wrapResponse(id, { ok: false, error: { message: r?.message } });
+  }
+
+  if (action === 'navigate') {
+    await chrome.tabs.update(tab.id, { url: args.url });
+    return wrapResponse(id, { ok: true, result: { url: args.url } });
+  }
+
+  return wrapResponse(id, { ok: false, error: { message: 'Unsupported action', code: 'UNSUPPORTED_ACTION' } });
 }
 
 // ── Native messaging ───────────────────────────────────────────────────────
@@ -88,8 +132,7 @@ function connect() {
         response = await handleRequest(msg.request);
       } catch (err) {
         response = wrapResponse(msg.request.id, {
-          ok: false,
-          error: { message: err.message, code: 'BACKGROUND_ERROR' }
+          ok: false, error: { message: err.message, code: 'BACKGROUND_ERROR' }
         });
       }
       port.postMessage({ kind: 'response', response });

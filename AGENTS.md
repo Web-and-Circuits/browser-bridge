@@ -1,47 +1,24 @@
 # AGENTS.md — Browser Bridge
 
-This repo is a Chrome extension + native host that lets an agent read and control the active browser tab through files on disk.
+A Chrome extension + native host that lets an agent read and control the active browser tab through files on disk.
 
-## How to use it
-
-Write a JSON request file. Read the response file. That's the full protocol.
-
-### CLI (fastest)
+## CLI
 
 ```bash
 ./bridge.js ping
 ./bridge.js get_active_tab
 ./bridge.js snapshot
+./bridge.js snapshot --selector "main"
+./bridge.js snapshot --mode forms
 ./bridge.js run_js "document.title"
-./bridge.js run_js "document.querySelector('h1').textContent"
-./bridge.js run_js "document.body.style.background = 'red'"
-./bridge.js run_js --raw "document.title"   # full response JSON
-```
+./bridge.js run_js "document.querySelectorAll('h2').length"
+./bridge.js click "#submit-btn"
+./bridge.js fill "#email" "user@example.com"
+./bridge.js navigate "https://example.com"
 
-### File protocol (direct)
-
-Write to `.bridge/requests/{id}.json`, read from `.bridge/responses/{id}.json`.
-
-Request format:
-```json
-{
-  "id": "unique-id",
-  "createdAt": "2026-03-10T00:00:00Z",
-  "target": "active-tab",
-  "action": "snapshot",
-  "args": {}
-}
-```
-
-Response format:
-```json
-{
-  "id": "unique-id",
-  "ok": true,
-  "createdAt": "2026-03-10T00:00:01Z",
-  "result": { ... },
-  "error": null
-}
+# flags
+./bridge.js snapshot --raw          # full response JSON
+./bridge.js ping --timeout 5000     # custom timeout (ms)
 ```
 
 ## Actions
@@ -50,32 +27,83 @@ Response format:
 |--------|------|---------|
 | `ping` | — | `{ pong: true }` |
 | `get_active_tab` | — | `{ tabId, title, url }` |
-| `snapshot` | — | `{ title, url, visibleText, links, selectionText }` |
-| `run_js` | `{ code: "..." }` | return value of the expression |
+| `snapshot` | `selector?`, `mode?` | `{ title, url, visibleText, links, selectionText }` |
+| `snapshot --mode forms` | — | `{ title, url, forms: [{tag, type, name, id, label, value, selector}] }` |
+| `run_js` | `code` | return value of the JS expression |
+| `click` | `selector` | `{ clicked: selector }` |
+| `fill` | `selector`, `value` | `{ filled: selector }` — fires input + change events |
+| `navigate` | `url` | `{ url }` |
 
-`run_js` runs in the page's main JS context — full DOM access, reads and writes, no restrictions.
+`run_js` and `click`/`fill` run in the page's main JS context — full DOM access.
+
+## File protocol (direct)
+
+Write to `.bridge/requests/{id}.json`, read from `.bridge/responses/{id}.json`.
+
+**Request:**
+```json
+{
+  "id": "any-unique-id",
+  "createdAt": "2026-03-10T00:00:00Z",
+  "target": "active-tab",
+  "action": "snapshot",
+  "args": {}
+}
+```
+
+**Response:**
+```json
+{
+  "id": "any-unique-id",
+  "ok": true,
+  "createdAt": "2026-03-10T00:00:01Z",
+  "result": { ... },
+  "error": null
+}
+```
+
+## Common patterns
+
+**Load page context into agent:**
+```bash
+./bridge.js snapshot --selector "article"
+./bridge.js snapshot --mode forms     # what inputs exist on this page
+```
+
+**Act on page:**
+```bash
+./bridge.js fill "#search" "query"
+./bridge.js click "[type=submit]"
+```
+
+**Evaluate then act:**
+```bash
+./bridge.js run_js "document.querySelector('#price').textContent"
+# agent reasons about result, then:
+./bridge.js click "#add-to-cart"
+```
 
 ## Requirements
 
-- Extension must be loaded in Chrome (`extension/` dir, unpacked)
-- Native host must be running (`./install.sh <extension-id>` — one-time setup)
+- Chrome with extension loaded (`extension/` dir, unpacked)
+- Native host running — run `./install.sh <extension-id>` once
 - Active tab must be a regular webpage (not `chrome://` pages)
-- Tab must have loaded after the extension was installed (reload if unsure)
+- Reload the tab if it was open before the extension was installed
 
-## Queue layout
+## Setup
+
+```bash
+# clone and load extension/ as unpacked in Chrome
+# extension ID is shown in the side panel
+./install.sh <extension-id>
+# side panel auto-connects — ready
+```
+
+## Queue
 
 ```
 .bridge/
   requests/    ← drop request files here
   responses/   ← responses appear here (same filename)
-  state/       ← host logs (stderr.log, host-error.log)
-```
-
-## Setup (one-time per machine)
-
-```bash
-# 1. load extension/  as unpacked in Chrome
-# 2. get extension ID from the side panel
-./install.sh <extension-id>
-# 3. reload the extension — side panel auto-connects
+  state/       ← stderr.log, host-error.log
 ```

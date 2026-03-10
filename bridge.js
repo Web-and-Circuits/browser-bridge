@@ -1,87 +1,127 @@
 #!/usr/bin/env node
-import { mkdir, readFile, watch, writeFile } from 'node:fs/promises';
+/**
+ * bridge.js — CLI for browser-bridge
+ *
+ * Write a request to .bridge/requests/, wait for the response in
+ * .bridge/responses/, print the result.
+ *
+ * Usage:
+ *   ./bridge.js <action> [args...] [flags]
+ *
+ * Actions:
+ *   ping
+ *   get_active_tab
+ *   snapshot  [--selector <css>]  [--mode default|forms]
+ *   run_js    <code>
+ *   click     <selector>
+ *   fill      <selector> <value>
+ *   navigate  <url>
+ *
+ * Flags:
+ *   --raw           print full response JSON
+ *   --timeout <ms>  response timeout (default 15000)
+ */
+
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
-const ROOT      = process.env.BROWSER_BRIDGE_DIR || join(dirname(fileURLToPath(import.meta.url)), '.bridge');
+const ROOT      = process.env.BROWSER_BRIDGE_DIR
+               || join(dirname(fileURLToPath(import.meta.url)), '.bridge');
 const REQUESTS  = join(ROOT, 'requests');
 const RESPONSES = join(ROOT, 'responses');
-const TIMEOUT   = 15000;
 
-const ACTIONS = ['ping', 'get_active_tab', 'snapshot', 'run_js'];
+const ACTIONS = ['ping', 'get_active_tab', 'snapshot', 'run_js', 'click', 'fill', 'navigate'];
 
 function usage() {
   console.error(`
-usage: bridge <action> [options]
+usage: bridge <action> [args] [flags]
 
 actions:
-  ping                        check the bridge is alive
-  get_active_tab              tab id, title, url
-  snapshot                    visible text + links from active tab
-  run_js <code>               evaluate JS in the active tab
+  ping                              check the bridge is alive
+  get_active_tab                    return tab id, title, url
+  snapshot                          visible text + links from active tab
+  snapshot --selector <css>         scope snapshot to a CSS selector
+  snapshot --mode forms             extract all form inputs + labels
+  run_js <code>                     evaluate JS expression in active tab
+  click <selector>                  click an element by CSS selector
+  fill <selector> <value>           set an input's value and fire input/change
+  navigate <url>                    navigate the active tab to a URL
 
-options:
-  --timeout <ms>              response timeout (default 15000)
-  --raw                       print full response JSON
-  --pretty                    print result only, formatted (default)
+flags:
+  --raw                             print full response JSON
+  --timeout <ms>                    wait timeout in ms (default 15000)
 
 examples:
-  bridge ping
-  bridge snapshot
-  bridge run_js "document.title"
-  bridge run_js "document.querySelectorAll('h1').length"
+  ./bridge.js ping
+  ./bridge.js snapshot
+  ./bridge.js snapshot --selector main
+  ./bridge.js snapshot --mode forms
+  ./bridge.js run_js "document.title"
+  ./bridge.js run_js "document.querySelectorAll('h2').length"
+  ./bridge.js click "#submit-btn"
+  ./bridge.js fill "#email" "user@example.com"
+  ./bridge.js navigate "https://example.com"
 `.trim());
   process.exit(1);
 }
 
-// ── Args ───────────────────────────────────────────────────────────────────
+// ── Parse args ─────────────────────────────────────────────────────────────
 
-const args = process.argv.slice(2);
-if (!args.length) usage();
+const argv = process.argv.slice(2);
+if (!argv.length) usage();
 
-const action = args[0];
-if (!ACTIONS.includes(action)) {
-  console.error(`unknown action: ${action}`);
-  usage();
-}
+const action = argv[0];
+if (!ACTIONS.includes(action)) { console.error(`unknown action: ${action}`); usage(); }
 
-let code     = null;
+const args   = {};
 let raw      = false;
-let timeout  = TIMEOUT;
+let timeout  = 15000;
+const rest   = argv.slice(1);
 
-for (let i = 1; i < args.length; i++) {
-  if (args[i] === '--raw')     { raw = true; continue; }
-  if (args[i] === '--pretty')  { raw = false; continue; }
-  if (args[i] === '--timeout') { timeout = parseInt(args[++i], 10); continue; }
-  if (action === 'run_js' && !args[i].startsWith('--')) { code = args[i]; continue; }
+for (let i = 0; i < rest.length; i++) {
+  const a = rest[i];
+  if (a === '--raw')      { raw = true; continue; }
+  if (a === '--timeout')  { timeout = parseInt(rest[++i], 10); continue; }
+  if (a === '--selector') { args.selector = rest[++i]; continue; }
+  if (a === '--mode')     { args.mode = rest[++i]; continue; }
+  if (!a.startsWith('--')) {
+    if (action === 'run_js'   && !args.code)     { args.code     = a; continue; }
+    if (action === 'click'    && !args.selector) { args.selector = a; continue; }
+    if (action === 'navigate' && !args.url)      { args.url      = a; continue; }
+    if (action === 'fill') {
+      if (!args.selector) { args.selector = a; continue; }
+      if (!args.value)    { args.value    = a; continue; }
+    }
+  }
 }
 
-if (action === 'run_js' && !code) {
-  console.error('run_js requires a code argument');
-  usage();
-}
+// Validate required args
+if (action === 'run_js'   && !args.code)     { console.error('run_js requires a code argument'); usage(); }
+if (action === 'click'    && !args.selector) { console.error('click requires a selector');        usage(); }
+if (action === 'fill'     && (!args.selector || args.value === undefined)) { console.error('fill requires <selector> <value>'); usage(); }
+if (action === 'navigate' && !args.url)      { console.error('navigate requires a url');          usage(); }
 
-// ── Request ────────────────────────────────────────────────────────────────
+// ── Write request ──────────────────────────────────────────────────────────
 
 const id      = randomUUID();
 const reqFile = join(REQUESTS, `${id}.json`);
 const resFile = join(RESPONSES, `${id}.json`);
 
-const request = {
+await mkdir(REQUESTS,  { recursive: true });
+await mkdir(RESPONSES, { recursive: true });
+
+await writeFile(reqFile, JSON.stringify({
   id,
   createdAt: new Date().toISOString(),
   target: 'active-tab',
   action,
-  args: code ? { code } : {}
-};
+  args
+}, null, 2) + '\n');
 
-await mkdir(REQUESTS,  { recursive: true });
-await mkdir(RESPONSES, { recursive: true });
-await writeFile(reqFile, JSON.stringify(request, null, 2) + '\n');
-
-// ── Wait for response ──────────────────────────────────────────────────────
+// ── Poll for response ──────────────────────────────────────────────────────
 
 const deadline = Date.now() + timeout;
 
@@ -94,7 +134,14 @@ while (Date.now() < deadline) {
       console.error('error:', response.error?.message || 'unknown');
       process.exit(1);
     } else {
-      console.log(JSON.stringify(response.result, null, 2));
+      const result = response.result;
+      if (result === null || result === undefined) {
+        console.log('null');
+      } else if (typeof result === 'object') {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        console.log(result);
+      }
     }
     process.exit(0);
   }
