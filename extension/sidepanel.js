@@ -167,6 +167,7 @@ function startPolling() {
 
 async function activate(handle) {
   rootHandle = handle;
+  window._bridgeRoot = handle; // debug — remove later
   await getSubdir(handle, 'requests');
   await getSubdir(handle, 'responses');
   showActive();
