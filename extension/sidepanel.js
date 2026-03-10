@@ -90,7 +90,7 @@ chrome.runtime.sendMessage({ kind: 'getStatus' }, response => {
 const installEl = document.getElementById('waiting-install');
 if (installEl) {
   const id = chrome.runtime.id;
-  installEl.textContent = `./host/install.sh ${id}\nthen: node ./host/bridge-host.js`;
+  installEl.textContent = `./host/install.sh ${id}`;
 }
 
 // fade in waiting UI after matrix has a moment to run
