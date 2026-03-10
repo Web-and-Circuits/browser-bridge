@@ -15,7 +15,7 @@ fi
 
 EXT_ID="$1"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HOST_SCRIPT="$SCRIPT_DIR/bridge-host.js"
+HOST_SCRIPT="$SCRIPT_DIR/host/bridge-host.js"
 MANIFEST_NAME="com.webandcircuits.browser_bridge"
 
 # ── Detect Chrome native messaging host directory ──────────────────────────

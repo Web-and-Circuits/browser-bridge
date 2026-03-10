@@ -88,7 +88,7 @@ chrome.runtime.sendMessage({ kind: 'getStatus' }, response => {
 
 // Populate install command with real extension ID
 const cmdEl = document.getElementById('waiting-cmd');
-if (cmdEl) cmdEl.textContent = `./host/install.sh ${chrome.runtime.id}`;
+if (cmdEl) cmdEl.textContent = `./install.sh ${chrome.runtime.id}`;
 
 // fade in waiting UI after matrix has a moment to run
 setTimeout(() => waitingUI.classList.add('visible'), 1800);
