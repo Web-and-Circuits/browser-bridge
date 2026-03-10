@@ -1,9 +1,0 @@
-{
-  "name": "com.webandcircuits.browser_bridge",
-  "description": "Browser Bridge native host",
-  "path": "/REPLACE/WITH/ABSOLUTE/PATH/TO/host/bridge-host.js",
-  "type": "stdio",
-  "allowed_origins": [
-    "chrome-extension://REPLACE_WITH_YOUR_EXTENSION_ID/"
-  ]
-}

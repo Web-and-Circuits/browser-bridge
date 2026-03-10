@@ -1,6 +1,8 @@
 # browser-bridge
 
-A Chrome extension + native host that lets a local agent talk to the active browser tab through files on disk.
+A Chrome extension that lets a local agent talk to the active browser tab through files on disk.
+
+No native host. No Node process. No install ceremony beyond loading the extension.
 
 Built for dev and debug use. Not hardened for distribution.
 
@@ -8,19 +10,19 @@ Built for dev and debug use. Not hardened for distribution.
 
 ## How it works
 
-The agent writes a JSON request file to disk. The native host picks it up and forwards it to the extension via Chrome's native messaging protocol. The extension runs the action on the active tab and responds. The response lands on disk as a JSON file. The agent reads it.
-
-Neither side holds a live connection to the other. The filesystem is the shared surface.
+The agent writes a JSON request file to disk. The extension's side panel polls that directory via the File System Access API, picks up the request, runs the action on the active tab, and writes the response back to disk. The agent reads it.
 
 ```
-agent  →  writes   ~/.browser-bridge/requests/{id}.json
-host   →  claims   requests-inflight/{id}.json  (atomic rename)
-host   →  forwards to extension via native messaging
-ext    →  runs action on active tab
-ext    →  responds via native messaging
-host   →  writes   ~/.browser-bridge/responses/{id}.json
-agent  →  reads response
+agent      →  writes   {queue}/requests/{id}.json
+side panel →  picks it up (polls every 300ms)
+side panel →  messages background service worker
+background →  runs action on active tab
+background →  responds to side panel
+side panel →  writes   {queue}/responses/{id}.json
+agent      →  reads response
 ```
+
+The side panel is the filesystem proxy. Background handles tab operations (scripting, tabs API). The queue directory is wherever you point it.
 
 ---
 
@@ -28,7 +30,7 @@ agent  →  reads response
 
 | action | what it does |
 |--------|-------------|
-| `ping` | check the host is alive |
+| `ping` | check the bridge is alive |
 | `get_active_tab` | return tab id, title, url |
 | `snapshot` | visible text, links, selection, title, url |
 | `run_js` | evaluate JavaScript in the active tab |
@@ -38,12 +40,12 @@ agent  →  reads response
 ## Queue layout
 
 ```
-~/.browser-bridge/
-  requests/           ← agent drops request files here
-  requests-inflight/  ← host claims files here (atomic rename)
-  responses/          ← host writes responses here
-  state/              ← host error logs
+{your chosen directory}/
+  requests/    ← agent drops request files here
+  responses/   ← side panel writes responses here
 ```
+
+Sub-directories are created automatically on first use.
 
 ---
 
@@ -81,51 +83,20 @@ agent  →  reads response
 
 ## Installation
 
-### 1. Load the extension
+1. Open `chrome://extensions`, enable Developer Mode
+2. Click **Load unpacked**, select the `extension/` directory
+3. Click the extension icon — the side panel opens
+4. Click **Select queue directory**, point it at your queue folder (e.g. `~/.browser-bridge`)
+5. Done — the panel polls for requests automatically
 
-Open `chrome://extensions`, enable Developer Mode, click **Load unpacked**, select the `extension/` directory. Copy the extension ID.
-
-### 2. Install the native host manifest
-
-Edit `host/com.webandcircuits.browser_bridge.json` — replace the extension ID in `allowed_origins`.
-
-Copy the manifest to Chrome's native messaging location:
-
-```bash
-# macOS
-cp host/com.webandcircuits.browser_bridge.json \
-  ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/
-
-# Linux
-cp host/com.webandcircuits.browser_bridge.json \
-  ~/.config/google-chrome/NativeMessagingHosts/
-```
-
-### 3. Run the native host
-
-```bash
-cd host
-node bridge-host.js
-```
-
-### 4. Write a request
-
-```bash
-cp examples/request.snapshot.json ~/.browser-bridge/requests/req-001.json
-```
-
-Then read the response:
-
-```bash
-cat ~/.browser-bridge/responses/req-001.json
-```
+Permission is stored in IndexedDB and restored on next open. Keep the side panel open while the bridge is in use.
 
 ---
 
 ## Posture
 
-No on/off toggle. No JS denylist. The bridge is live when the host is running.
+No on/off toggle. No JS denylist. The bridge is live when the side panel is open and a directory is selected.
 
-The one constraint that matters: **deliberate invocation only.** Nothing fires automatically. Requests only happen when something explicitly writes a request file. The host polls an empty directory constantly but does nothing until a file appears — no tab touches, no JS.
+**Deliberate invocation only.** Nothing fires automatically. Requests only happen when something explicitly writes a request file. Polling an empty directory is essentially free.
 
 Write one request. Read the result. Decide if you need more.

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Browser Bridge</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font: 13px/1.5 -apple-system, system-ui, sans-serif;
+    color: #222;
+    padding: 14px;
+    background: #fff;
+  }
+  h1 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #ccc;
+    flex-shrink: 0;
+    transition: background 0.2s;
+  }
+  .dot.ready  { background: #4caf50; }
+  .dot.active { background: #2196f3; }
+  .dot.error  { background: #f44336; }
+
+  #status-text { font-size: 12px; color: #555; }
+
+  button {
+    padding: 7px 12px;
+    border-radius: 7px;
+    border: 1px solid #ccc;
+    background: #fff;
+    cursor: pointer;
+    font-size: 12px;
+    margin-bottom: 14px;
+  }
+  button:hover { background: #f5f5f5; }
+
+  #dir-path {
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 14px;
+    word-break: break-all;
+  }
+
+  #log {
+    font-size: 11px;
+    font-family: ui-monospace, monospace;
+    color: #444;
+    max-height: 320px;
+    overflow-y: auto;
+    border-top: 1px solid #eee;
+    padding-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .log-entry { color: #666; }
+  .log-entry.ok { color: #2e7d32; }
+  .log-entry.err { color: #c62828; }
+</style>
+</head>
+<body>
+  <h1>Browser Bridge</h1>
+
+  <div class="status">
+    <div class="dot" id="dot"></div>
+    <span id="status-text">No directory selected</span>
+  </div>
+
+  <button id="pick-btn">Select queue directory</button>
+  <div id="dir-path"></div>
+  <div id="log"></div>
+
+  <script src="sidepanel.js" type="module"></script>
+</body>
+</html>

@@ -1,4 +1,7 @@
-const HOST_NAME = 'com.webandcircuits.browser_bridge';
+// Open side panel when extension icon is clicked
+chrome.action.onClicked.addListener(tab => {
+  chrome.sidePanel.open({ windowId: tab.windowId });
+});
 
 function wrapResponse(id, payload) {
   return {
@@ -40,20 +43,10 @@ async function handleRequest(request) {
   return wrapResponse(request.id, { ok: false, error: { message: 'Unsupported action', code: 'UNSUPPORTED_ACTION' } });
 }
 
-function connectNative() {
-  try {
-    const port = chrome.runtime.connectNative(HOST_NAME);
-    port.onMessage.addListener(async message => {
-      if (!message || message.kind !== 'request' || !message.request) return;
-      const response = await handleRequest(message.request);
-      port.postMessage({ kind: 'response', response });
-    });
-    port.onDisconnect.addListener(() => {
-      setTimeout(connectNative, 2000);
-    });
-  } catch {
-    setTimeout(connectNative, 4000);
+// Side panel sends requests here for tab-level operations
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.kind === 'request' && message.request) {
+    handleRequest(message.request).then(sendResponse);
+    return true; // keep channel open for async response
   }
-}
-
-connectNative();
+});
