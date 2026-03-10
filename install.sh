@@ -15,8 +15,32 @@ fi
 
 EXT_ID="$1"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOST_DIR="$SCRIPT_DIR/host"
 HOST_SCRIPT="$SCRIPT_DIR/host/bridge-host.js"
+WRAPPER="$HOST_DIR/run.sh"
 MANIFEST_NAME="com.webandcircuits.browser_bridge"
+
+# ── Find node ──────────────────────────────────────────────────────────────
+NODE_BIN="$(command -v node 2>/dev/null)"
+if [[ -z "$NODE_BIN" ]]; then
+  # common install locations
+  for p in /usr/local/bin/node /opt/homebrew/bin/node /usr/bin/node; do
+    [[ -x "$p" ]] && NODE_BIN="$p" && break
+  done
+fi
+if [[ -z "$NODE_BIN" ]]; then
+  echo "✗ node not found — install Node.js and try again"
+  exit 1
+fi
+echo "✓ node: $NODE_BIN"
+
+# ── Write wrapper script (bakes in node path + working dir) ───────────────
+cat > "$WRAPPER" <<EOF
+#!/bin/bash
+cd "$HOST_DIR"
+exec "$NODE_BIN" bridge-host.js
+EOF
+chmod +x "$WRAPPER"
 
 # ── Detect Chrome native messaging host directory ──────────────────────────
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -34,7 +58,7 @@ cat > "$MANIFEST_PATH" <<EOF
 {
   "name": "$MANIFEST_NAME",
   "description": "Browser Bridge native host",
-  "path": "$HOST_SCRIPT",
+  "path": "$WRAPPER",
   "type": "stdio",
   "allowed_origins": [
     "chrome-extension://$EXT_ID/"
