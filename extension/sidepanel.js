@@ -54,15 +54,20 @@ function log(msg, kind = '') {
 
 // ── Background messages ────────────────────────────────────────────────────
 
+let everConnected = false;
+
 chrome.runtime.onMessage.addListener(msg => {
   if (msg.kind === 'status') {
     if (msg.connected) {
+      everConnected = true;
       showActive();
       setStatus('connected', 'connected');
       log('host connected', 'ok');
     } else {
-      setStatus('disconnected', 'host disconnected — retrying…');
-      log('host disconnected', 'err');
+      if (everConnected) {
+        setStatus('disconnected', 'host disconnected — retrying…');
+        log('host disconnected', 'err');
+      }
     }
   }
 
