@@ -1,0 +1,9 @@
+{
+  "name": "browser-bridge",
+  "version": "0.4.0",
+  "type": "module",
+  "description": "File-mediated bridge between a local agent and the active browser tab",
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

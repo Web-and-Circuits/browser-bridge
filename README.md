@@ -20,7 +20,18 @@ agent  →  reads result
 
 ---
 
-## Setup
+## Two modes
+
+| | Extension mode | Bookmarklet mode |
+|---|---|---|
+| **requires** | Chrome extension loaded | nothing installed |
+| **works when** | extensions allowed | extensions blocked by policy |
+| **persistence** | always connected | connect per-tab by clicking bookmark |
+| **transport** | native messaging | WebSocket (`ws://localhost:9876`) |
+
+---
+
+## Extension mode setup
 
 **1. Clone and load the extension**
 
@@ -43,6 +54,30 @@ This installs the native messaging manifest and generates a wrapper script with 
 **3. Done**
 
 Reload the extension. The side panel connects automatically and shows status.
+
+---
+
+---
+
+## Bookmarklet mode setup
+
+For environments where Chrome extensions are blocked by policy.
+
+**1. Install deps and start the server**
+
+```bash
+npm install
+node server.js        # default port 9876
+# or: BRIDGE_PORT=9999 node server.js
+```
+
+**2. Add the bookmarklet**
+
+Open `bookmarklet.js`, copy the minified one-liner from the bottom (starts with `javascript:`), and paste it into a new browser bookmark's URL field.
+
+**3. Connect**
+
+Navigate to any page, click the bookmark. The server terminal shows `bookmarklet connected`. The bridge CLI works exactly the same from here.
 
 ---
 
