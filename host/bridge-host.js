@@ -128,9 +128,13 @@ async function handlePrompt({ id, message, mode = 'amnesia', resumeId = null }) 
   }
   // amnesia: no --resume
 
+  // Ensure node is on PATH so ./bridge.js (#!/usr/bin/env node) resolves
+  const nodeDir = dirname(process.execPath);
+  const envPath = [nodeDir, process.env.PATH].filter(Boolean).join(':');
+
   const proc = spawn(claudeBin, args, {
     cwd: REPO_ROOT,
-    env: { ...process.env, BROWSER_BRIDGE_DIR: ROOT },
+    env: { ...process.env, BROWSER_BRIDGE_DIR: ROOT, PATH: envPath },
     stdio: ['ignore', 'pipe', 'pipe']
   });
 
