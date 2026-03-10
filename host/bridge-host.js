@@ -3,7 +3,7 @@ import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promise
 import { join, resolve } from 'node:path';
 import os from 'node:os';
 
-const ROOT     = resolve(process.env.BROWSER_BRIDGE_DIR || join(os.homedir(), '.browser-bridge'));
+const ROOT     = resolve(process.env.BROWSER_BRIDGE_DIR || join(os.homedir(), '.browser-bridge')); // install.sh sets this to $REPO/.bridge
 const REQUESTS = join(ROOT, 'requests');
 const INFLIGHT = join(ROOT, 'requests-inflight');
 const RESPONSES = join(ROOT, 'responses');

@@ -34,10 +34,13 @@ if [[ -z "$NODE_BIN" ]]; then
 fi
 echo "✓ node: $NODE_BIN"
 
+BRIDGE_DIR="$SCRIPT_DIR/.bridge"
+
 # ── Write wrapper script (bakes in node path + working dir) ───────────────
 cat > "$WRAPPER" <<EOF
 #!/bin/bash
 cd "$HOST_DIR"
+export BROWSER_BRIDGE_DIR="$BRIDGE_DIR"
 exec "$NODE_BIN" bridge-host.js
 EOF
 chmod +x "$WRAPPER"
