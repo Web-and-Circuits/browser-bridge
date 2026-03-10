@@ -71,6 +71,107 @@ function showInstructions() {
     </div>`;
 }
 
+// ── Stream rendering ───────────────────────────────────────────────────────
+
+const streams = new Map(); // id → { block, streamEl, thinkingEl }
+
+function startStream(id, userMsg) {
+  if (logEl.querySelector('.instructions')) logEl.innerHTML = '';
+
+  const block = document.createElement('div');
+  block.className = 'claude-block';
+
+  const you = document.createElement('div');
+  you.className = 'claude-you';
+  you.textContent = '▸ ' + userMsg;
+  block.appendChild(you);
+
+  const thinking = document.createElement('div');
+  thinking.className = 'claude-thinking';
+  thinking.textContent = 'claude is thinking…';
+  block.appendChild(thinking);
+
+  logEl.prepend(block);
+
+  streams.set(id, { block, thinkingEl: thinking, streamEl: null });
+}
+
+function appendStream(id, chunk, dim = false) {
+  const s = streams.get(id);
+  if (!s) return;
+
+  if (s.thinkingEl) {
+    s.thinkingEl.remove();
+    s.thinkingEl = null;
+    const streamEl = document.createElement('div');
+    streamEl.className = 'claude-stream' + (dim ? ' dim' : '');
+    s.block.appendChild(streamEl);
+    s.streamEl = streamEl;
+  }
+
+  s.streamEl.textContent += chunk;
+  s.streamEl.scrollIntoView({ block: 'nearest' });
+}
+
+function endStream(id, ok) {
+  const s = streams.get(id);
+  if (!s) return;
+  if (s.thinkingEl) {
+    s.thinkingEl.textContent = ok ? '(no output)' : '(failed)';
+  }
+  if (s.streamEl && !ok) {
+    s.streamEl.classList.add('error');
+  }
+  streams.delete(id);
+  setStatus('connected', 'connected');
+}
+
+// ── Prompt submit ──────────────────────────────────────────────────────────
+
+const promptInput = document.getElementById('prompt-input');
+const promptSend  = document.getElementById('prompt-send');
+
+function submitPrompt() {
+  const message = promptInput.value.trim();
+  if (!message) return;
+  const id = crypto.randomUUID();
+  promptInput.value = '';
+  promptInput.style.height = '';
+  promptSend.disabled = true;
+  setStatus('active', 'claude');
+  startStream(id, message);
+  chrome.runtime.sendMessage({ kind: 'prompt', id, message });
+}
+
+promptSend.addEventListener('click', submitPrompt);
+promptInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitPrompt(); }
+});
+promptInput.addEventListener('input', () => {
+  promptInput.style.height = 'auto';
+  promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
+});
+
+// ── Background messages ────────────────────────────────────────────────────
+
+let everConnected = false;
+
+function showInstructions() {
+  logEl.innerHTML = `
+    <div class="instructions">
+      <div class="inst-head">how to use</div>
+      <div class="inst-row"><span class="inst-label">1.</span> install &amp; start the host if you haven't — see the install command above</div>
+      <div class="inst-row"><span class="inst-label">2.</span> type a task below to run claude on this page</div>
+      <div class="inst-row"><span class="inst-label">3.</span> or write JSON requests directly to <code>.bridge/requests/</code></div>
+      <div class="inst-head" style="margin-top:12px">actions</div>
+      <div class="inst-row"><code>ping</code> — check the bridge is alive</div>
+      <div class="inst-row"><code>get_active_tab</code> — tab id, title, url</div>
+      <div class="inst-row"><code>snapshot</code> — visible text + links</div>
+      <div class="inst-row"><code>run_js</code> — evaluate JS in the tab</div>
+      <div class="inst-row"><code>click</code> · <code>fill</code> · <code>navigate</code> — act on page</div>
+    </div>`;
+}
+
 chrome.runtime.onMessage.addListener(msg => {
   if (msg.kind === 'status') {
     if (msg.connected) {
@@ -82,16 +183,25 @@ chrome.runtime.onMessage.addListener(msg => {
       setStatus('connected', 'connected');
     } else {
       setStatus('disconnected', 'host disconnected — retrying…');
+      promptSend.disabled = false;
     }
   }
 
   if (msg.kind === 'activity') {
-    // first activity — clear instructions
     if (logEl.querySelector('.instructions')) logEl.innerHTML = '';
     const label = msg.action + ' → ' + (msg.ok ? 'ok' : 'err');
     log(label, msg.ok ? 'ok' : 'err');
     setStatus('active', msg.action);
     setTimeout(() => setStatus('connected', 'connected'), 800);
+  }
+
+  if (msg.kind === 'stream') {
+    appendStream(msg.id, msg.chunk, msg.dim);
+  }
+
+  if (msg.kind === 'stream-end') {
+    promptSend.disabled = false;
+    endStream(msg.id, msg.ok);
   }
 });
 

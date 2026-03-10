@@ -162,6 +162,77 @@
   .inst-row { color: #bbb; line-height: 1.5; }
   .inst-row code { color: #888; background: #f5f5f5; padding: 1px 4px; border-radius: 3px; font-size: 10px; }
   .inst-label { color: #ccc; margin-right: 4px; }
+
+  /* ── Prompt bar ── */
+  #prompt-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    padding: 8px 10px;
+    border-top: 1px solid #eee;
+    background: #fafafa;
+  }
+  #prompt-input {
+    flex: 1;
+    font: 12px/1.4 -apple-system, system-ui, sans-serif;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 6px 8px;
+    resize: none;
+    outline: none;
+    max-height: 120px;
+    overflow-y: auto;
+    background: #fff;
+    color: #222;
+  }
+  #prompt-input:focus { border-color: #aaa; }
+  #prompt-send {
+    flex-shrink: 0;
+    width: 28px; height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: #222;
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    line-height: 1;
+  }
+  #prompt-send:hover { background: #444; }
+  #prompt-send:disabled { background: #ccc; cursor: default; }
+
+  /* ── Claude stream block ── */
+  .claude-block {
+    margin: 4px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .claude-you {
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 11px;
+    color: #555;
+    font-style: italic;
+  }
+  .claude-stream {
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    color: #2e7d32;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.5;
+    padding: 4px 0;
+    border-left: 2px solid #e8f5e9;
+    padding-left: 8px;
+  }
+  .claude-stream.error { color: #c62828; border-color: #ffebee; }
+  .claude-stream.dim   { color: #bbb; }
+  .claude-thinking {
+    font-family: ui-monospace, monospace;
+    font-size: 10px;
+    color: #bbb;
+    animation: blink 1.5s ease-in-out infinite;
+  }
 </style>
 </head>
 <body>
@@ -200,6 +271,10 @@
       </div>
     </div>
     <div id="log"></div>
+    <div id="prompt-bar">
+      <textarea id="prompt-input" placeholder="ask claude to do something on this page…" rows="1"></textarea>
+      <button id="prompt-send">↑</button>
+    </div>
   </div>
 
   <script src="matrix.js" type="module"></script>

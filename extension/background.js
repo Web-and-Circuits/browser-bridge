@@ -126,7 +126,14 @@ function connect() {
     broadcast({ kind: 'status', connected: true });
 
     port.onMessage.addListener(async msg => {
-      if (!msg || msg.kind !== 'request' || !msg.request) return;
+      if (!msg) return;
+
+      if (msg.kind === 'stream' || msg.kind === 'stream-end') {
+        broadcast(msg);
+        return;
+      }
+
+      if (!msg.request || msg.kind !== 'request') return;
       let response;
       try {
         response = await handleRequest(msg.request);
@@ -157,6 +164,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.kind === 'getStatus') {
     sendResponse({ connected });
     return;
+  }
+  if (msg.kind === 'prompt' && port) {
+    port.postMessage({ kind: 'prompt', id: msg.id, message: msg.message });
   }
 });
 
