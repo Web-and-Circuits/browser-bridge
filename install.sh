@@ -37,11 +37,12 @@ echo "✓ node: $NODE_BIN"
 BRIDGE_DIR="$SCRIPT_DIR/.bridge"
 
 # ── Write wrapper script (bakes in node path + working dir) ───────────────
+mkdir -p "$BRIDGE_DIR/state"
 cat > "$WRAPPER" <<EOF
 #!/bin/bash
 cd "$HOST_DIR"
 export BROWSER_BRIDGE_DIR="$BRIDGE_DIR"
-exec "$NODE_BIN" bridge-host.js
+exec "$NODE_BIN" bridge-host.js 2>>"$BRIDGE_DIR/state/stderr.log"
 EOF
 chmod +x "$WRAPPER"
 
@@ -75,7 +76,5 @@ cp "$MANIFEST_PATH" "$DEST_DIR/$MANIFEST_NAME.json"
 
 echo ""
 echo "✓ manifest installed → $DEST_DIR/$MANIFEST_NAME.json"
-echo "✓ starting host…"
+echo "✓ done — reload the extension in Chrome and the host will connect automatically"
 echo ""
-
-exec node "$HOST_SCRIPT"
