@@ -123,7 +123,13 @@ FSA (File System Access API) was evaluated and rejected — Chrome's sandbox on 
 
 ---
 
+## Roadmap
+
+- Agent-side client library (`import { bridge } from 'browser-bridge/client'`)
+- Browser-initiated observations (extension writes events to disk unprompted)
+- Multi-tab targeting (`target: "tab:url:pattern"`)
+- Replay + audit tooling over the `.bridge/archive/`
+
 ## See also
 
 - `AGENTS.md` — concise reference for AI coding agents
-- `future-vision.md` — planned extensions
