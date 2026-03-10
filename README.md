@@ -1,6 +1,6 @@
 # browser-bridge
 
-A Chrome extension + native host that lets a local agent read and control the active browser tab through files on disk.
+A Chrome extension + local server that lets an agent read and control the active browser tab through files on disk.
 
 No cloud. No API keys. Files in, files out.
 
@@ -8,13 +8,12 @@ No cloud. No API keys. Files in, files out.
 
 ## What it does
 
-The agent writes a JSON request file. The native host picks it up and forwards it to the extension. The extension runs the action on the active tab and writes the response. The agent reads it.
+The agent writes a JSON request file. The bridge picks it up, runs the action on the active tab, and writes the response. The agent reads it.
 
 ```
 agent  →  .bridge/requests/{id}.json
-host   →  forwards to extension (native messaging)
-ext    →  runs action on active tab
-host   →  .bridge/responses/{id}.json
+bridge →  runs action on active tab
+bridge →  .bridge/responses/{id}.json
 agent  →  reads result
 ```
 
@@ -24,64 +23,108 @@ agent  →  reads result
 
 | | Extension mode | Bookmarklet mode |
 |---|---|---|
-| **requires** | Chrome extension loaded | nothing installed |
-| **works when** | extensions allowed | extensions blocked by policy |
-| **persistence** | always connected | connect per-tab by clicking bookmark |
-| **transport** | native messaging | WebSocket (`ws://localhost:9876`) |
+| **transport** | Native messaging (no server) | WebSocket (`ws://localhost:9876`) |
+| **sidebar** | Yes — status, chat, on/off toggle | No — headless |
+| **persistence** | Always connected | Click bookmark per page |
+| **use when** | Extensions are allowed | Extensions blocked by policy |
 
 ---
 
-## Extension mode setup
+## Extension mode
 
-**1. Clone and load the extension**
+### Setup
 
 ```bash
 git clone https://github.com/Web-and-Circuits/browser-bridge
 ```
 
-In Chrome: open `chrome://extensions`, enable Developer Mode, click **Load unpacked**, select the `extension/` directory.
+In Chrome: `chrome://extensions` → enable Developer Mode → **Load unpacked** → select the `extension/` directory.
 
-**2. Install the native host**
-
-The side panel shows your extension ID and the exact command to run:
+The side panel shows your extension ID and the install command. Run it:
 
 ```bash
 ./install.sh <your-extension-id>
 ```
 
-This installs the native messaging manifest and generates a wrapper script with the correct Node path. One-time per machine.
+This finds your Node.js binary, writes a wrapper script with baked-in paths, and installs the native messaging manifest. One-time per machine.
 
-**3. Done**
+Reload the extension. The side panel connects automatically.
 
-Reload the extension. The side panel connects automatically and shows status.
+### Side panel
+
+The side panel gives you:
+- **On/off toggle** — bright green bar at the top; click to disable the bridge (useful on sensitive pages like Gmail)
+- **Status dot** — shows connected / disconnected / active
+- **Chat** — type a task, Claude runs it on the page using `bridge.js` commands, output streams into the sidebar
+- **Chat modes** — `amnesia` (stateless), `session` (persistent conversation), `terminal` (paste a session ID to join a running Claude session)
+- **Activity log** — every request/response logged with tally marks for duplicates
+
+The bridge only works when the sidebar is open and the toggle is on. Requests sent while it's off or closed return an immediate error rather than timing out.
 
 ---
 
----
-
-## Bookmarklet mode setup
+## Bookmarklet mode
 
 For environments where Chrome extensions are blocked by policy.
 
-**1. Install deps and start the server**
+### How it works
 
-```bash
-npm install
-node server.js        # default port 9876
-# or: BRIDGE_PORT=9999 node server.js
+A local WebSocket server replaces the native messaging host. The bookmarklet connects to it from the browser. The file protocol and CLI are identical — only the transport changes.
+
+```
+agent     →  .bridge/requests/{id}.json
+server.js →  forwards via WebSocket
+bookmarklet → runs action on active tab
+server.js →  .bridge/responses/{id}.json
+agent     →  reads result
 ```
 
-**2. Add the bookmarklet**
+### Setup
 
-Open `bookmarklet.js`, copy the minified one-liner from the bottom (starts with `javascript:`), and paste it into a new browser bookmark's URL field.
+```bash
+git clone https://github.com/Web-and-Circuits/browser-bridge
+cd browser-bridge
+npm install
+node server.js           # starts on ws://localhost:9876
+```
 
-**3. Connect**
+To use a different port:
+```bash
+BRIDGE_PORT=9999 node server.js
+```
 
-Navigate to any page, click the bookmark. The server terminal shows `bookmarklet connected`. The bridge CLI works exactly the same from here.
+### Add the bookmarklet
+
+1. Open `bookmarklet.js` in any text editor
+2. Copy the last line — the minified `javascript:(function(){...})();` one-liner
+3. In Chrome: open Bookmarks → **Add new bookmark** → paste it as the URL → save
+
+### Connect
+
+Navigate to any page, click the bookmark. The server terminal prints:
+```
+[bridge] bookmarklet connected
+```
+
+Run commands normally:
+```bash
+./bridge.js ping
+./bridge.js snapshot
+./bridge.js run_js "document.title"
+```
+
+### Notes
+
+- **One click per page** — the bookmarklet runs in the page's JavaScript context. When you navigate to a new page, the connection drops. Click the bookmark again to reconnect. The `server.js` process stays running.
+- **HTTPS pages** — Chrome allows `ws://localhost` from HTTPS pages (localhost is treated as a secure context).
+- **No sidebar** — bookmarklet mode is headless. Status visible in browser console (`[bridge] connected / disconnected`).
+- **Audit trail** — all processed requests are moved to `.bridge/archive/` and kept permanently.
 
 ---
 
 ## CLI
+
+Works the same in both modes.
 
 ```bash
 ./bridge.js ping
@@ -90,32 +133,38 @@ Navigate to any page, click the bookmark. The server terminal shows `bookmarklet
 ./bridge.js snapshot --selector "main"
 ./bridge.js snapshot --mode forms
 ./bridge.js run_js "document.title"
+./bridge.js run_js "document.querySelectorAll('h2').length"
 ./bridge.js click "#submit-btn"
 ./bridge.js fill "#email" "user@example.com"
 ./bridge.js navigate "https://example.com"
+
+# flags
+./bridge.js snapshot --raw          # full response JSON
+./bridge.js ping --timeout 5000     # custom timeout (ms, default 15000)
 ```
 
 ---
 
 ## Actions
 
-| action | description |
-|--------|-------------|
-| `ping` | check the bridge is alive |
-| `get_active_tab` | tab id, title, url |
-| `snapshot` | visible text + links from active tab |
-| `snapshot --selector <css>` | scope snapshot to a CSS selector |
-| `snapshot --mode forms` | extract all form inputs, labels, selectors |
-| `run_js <code>` | evaluate a JS expression in the page |
-| `click <selector>` | click an element |
-| `fill <selector> <value>` | set an input value, fire input + change events |
-| `navigate <url>` | navigate the active tab |
+| action | args | returns |
+|--------|------|---------|
+| `ping` | — | `{ pong: true }` |
+| `get_active_tab` | — | `{ tabId, title, url }` |
+| `snapshot` | `selector?`, `mode?` | `{ title, url, visibleText, links, selectionText }` |
+| `snapshot --mode forms` | — | `{ title, url, forms: [{tag, type, name, id, label, value, selector}] }` |
+| `run_js` | `code` | return value of the JS expression |
+| `click` | `selector` | `{ clicked: selector }` |
+| `fill` | `selector`, `value` | `{ filled: selector }` |
+| `navigate` | `url` | `{ url }` |
+
+`run_js`, `click`, and `fill` run in the page's main JS context — full DOM access.
 
 ---
 
 ## File protocol
 
-For agents writing requests directly without the CLI:
+For agents writing requests directly:
 
 **Request** — write to `.bridge/requests/{id}.json`:
 ```json
@@ -139,6 +188,16 @@ For agents writing requests directly without the CLI:
 }
 ```
 
+Queue layout:
+```
+.bridge/
+  requests/           ← drop request files here
+  requests-inflight/  ← claimed by host (do not touch)
+  responses/          ← responses appear here
+  archive/            ← processed requests (permanent audit trail)
+  state/              ← logs (stderr.log, host-error.log)
+```
+
 ---
 
 ## Requirements
@@ -146,15 +205,18 @@ For agents writing requests directly without the CLI:
 - Node.js
 - Chrome 114+
 - Active tab must be a regular webpage (not `chrome://` pages)
-- Reload any tab that was open before the extension was installed
 
 ---
 
 ## How it works
 
-The side panel's matrix animation runs until the native host connects. Once connected it shows live request/response activity. The host polls `.bridge/requests/` every 300ms, claims files atomically via rename, forwards them to the extension over Chrome's native messaging protocol, and writes responses back to disk.
+**Extension mode**: the host process (`host/bridge-host.js`) connects to the extension via Chrome's native messaging protocol. It polls `.bridge/requests/` every 300ms, claims files atomically via rename (preventing double-processing), forwards requests to the extension, and writes responses back to disk. The extension runs actions in the active tab via content scripts and `chrome.scripting.executeScript`.
 
-FSA (File System Access API) was evaluated and rejected — Chrome's sandbox on macOS prevents extensions from seeing files written by external processes. Native messaging is the correct transport for this use case.
+**Bookmarklet mode**: `server.js` runs a WebSocket server instead. The bookmarklet connects to it from the page's JavaScript context. Same file queue, same CLI, different transport.
+
+In both modes, processed request files are renamed to `.bridge/archive/` rather than deleted — no Trash prompts, full audit trail.
+
+FSA (File System Access API) was evaluated and rejected early — Chrome's sandbox on macOS prevents extensions from seeing files written by external processes. Native messaging / WebSocket are the correct transports.
 
 ---
 
@@ -163,8 +225,11 @@ FSA (File System Access API) was evaluated and rejected — Chrome's sandbox on 
 - Agent-side client library (`import { bridge } from 'browser-bridge/client'`)
 - Browser-initiated observations (extension writes events to disk unprompted)
 - Multi-tab targeting (`target: "tab:url:pattern"`)
-- Replay + audit tooling over the `.bridge/archive/`
+- Replay + audit tooling over `.bridge/archive/`
+
+---
 
 ## See also
 
 - `AGENTS.md` — concise reference for AI coding agents
+- `CLAUDE.md` — Claude-specific instructions (auto-loaded by `claude -p`)
