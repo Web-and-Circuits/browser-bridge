@@ -119,6 +119,7 @@ async function poll() {
     const responsesDir = await getSubdir(rootHandle, 'responses');
 
     for await (const [name] of requestsDir) {
+      console.log('[bridge] found:', name);
       if (!name.endsWith('.json') || processing.has(name)) continue;
       processing.add(name);
       setStatus('active', 'processing…');
@@ -169,7 +170,7 @@ async function activate(handle) {
   await getSubdir(handle, 'requests');
   await getSubdir(handle, 'responses');
   showActive();
-  setStatus('ready', 'listening');
+  setStatus('ready', 'listening — ' + handle.name);
   startPolling();
 }
 
