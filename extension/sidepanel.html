@@ -52,32 +52,44 @@
     text-transform: uppercase;
     opacity: 0.7;
   }
+  #waiting-desc {
+    font-family: ui-monospace, monospace;
+    font-size: 10px;
+    color: #00ff41;
+    opacity: 0.3;
+    text-align: center;
+    margin-bottom: 4px;
+  }
   #waiting-steps {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     text-align: left;
+    width: 100%;
+    max-width: 260px;
   }
   .step {
     font-family: ui-monospace, monospace;
     font-size: 10px;
     color: #00ff41;
-    opacity: 0.4;
-    letter-spacing: 0.04em;
+    opacity: 0.45;
+    letter-spacing: 0.03em;
   }
-  .step.done { opacity: 0.25; }
+  .step .dim { opacity: 0.5; }
+  .step.done { opacity: 0.2; }
   .step.cmd {
-    opacity: 0.8;
+    opacity: 0.85;
     background: rgba(0,255,65,0.07);
     border: 1px solid rgba(0,255,65,0.2);
     border-radius: 4px;
-    padding: 6px 10px;
+    padding: 5px 10px;
     cursor: pointer;
     user-select: all;
+    word-break: break-all;
   }
-  .step.cmd:hover { opacity: 1; background: rgba(0,255,65,0.12); }
-  #step-host { animation: pulse 2s ease-in-out infinite; }
-  @keyframes pulse { 0%,100%{opacity:0.4} 50%{opacity:0.7} }
+  .step.cmd:hover { opacity: 1; background: rgba(0,255,65,0.13); }
+  .step.pulse { animation: blink 2s ease-in-out infinite; }
+  @keyframes blink { 0%,100%{opacity:0.35} 50%{opacity:0.65} }
 
   /* ── Active screen ── */
   #active {
@@ -127,11 +139,14 @@
     <canvas id="matrix-canvas"></canvas>
     <div id="waiting-ui">
       <div id="waiting-title">browser bridge</div>
+      <div id="waiting-desc">connects a local agent to this tab via files on disk</div>
       <div id="waiting-steps">
-        <div class="step done">① extension loaded</div>
-        <div class="step" id="step-install">② run in terminal:</div>
+        <div class="step done">① extension loaded ✓</div>
+        <div class="step">② clone the repo <span class="dim">(if you haven't)</span></div>
+        <div class="step cmd">git clone https://github.com/Web-and-Circuits/browser-bridge</div>
+        <div class="step">③ run the installer <span class="dim">(needs Node.js)</span></div>
         <div class="step cmd" id="waiting-cmd">—</div>
-        <div class="step" id="step-host">③ waiting for host to connect…</div>
+        <div class="step pulse" id="step-host">④ waiting for host to connect…</div>
       </div>
     </div>
   </div>
