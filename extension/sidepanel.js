@@ -168,14 +168,60 @@ function startPolling() {
   poll();
 }
 
+// ── Self-test ──────────────────────────────────────────────────────────────
+
+async function selfTest(root) {
+  const TEST = '__bridge-test.json';
+  const payload = { ok: true, ts: Date.now() };
+
+  // write
+  let writeOk = false;
+  try {
+    await writeJson(root, TEST, payload);
+    writeOk = true;
+    log('write: ok', 'ok');
+  } catch (err) {
+    log('write: failed — ' + err.message, 'err');
+    return false;
+  }
+
+  // read back
+  try {
+    const fh   = await root.getFileHandle(TEST);
+    const file  = await fh.getFile();
+    const data  = JSON.parse(await file.text());
+    if (data.ts === payload.ts) {
+      log('read:  ok', 'ok');
+    } else {
+      log('read:  stale data', 'err');
+      return false;
+    }
+  } catch (err) {
+    log('read:  failed — ' + err.message, 'err');
+    return false;
+  }
+
+  // cleanup
+  try { await root.removeEntry(TEST); } catch {}
+
+  return true;
+}
+
 // ── Activate ───────────────────────────────────────────────────────────────
 
 async function activate(handle) {
   rootHandle = handle;
-  window._bridgeRoot = handle; // debug — remove later
   await getSubdir(handle, 'requests');
   await getSubdir(handle, 'responses');
   showActive();
+  setStatus('checking', 'self-test…');
+
+  const ok = await selfTest(handle);
+  if (!ok) {
+    setStatus('error', 'file access failed — check permissions');
+    return;
+  }
+
   setStatus('ready', 'listening — ' + handle.name);
   startPolling();
 }
