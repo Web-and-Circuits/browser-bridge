@@ -9,6 +9,7 @@ const ROOT      = resolve(process.env.BROWSER_BRIDGE_DIR || join(os.homedir(), '
 const REQUESTS  = join(ROOT, 'requests');
 const INFLIGHT  = join(ROOT, 'requests-inflight');
 const RESPONSES = join(ROOT, 'responses');
+const ARCHIVE   = join(ROOT, 'archive');
 const STATE     = join(ROOT, 'state');
 const REPO_ROOT = dirname(ROOT); // .bridge lives inside the repo
 
@@ -180,9 +181,29 @@ async function handlePrompt({ id, message, mode = 'amnesia', resumeId = null }) 
 // ── File queue loop ────────────────────────────────────────────────────────
 
 async function ensureDirs() {
-  for (const d of [REQUESTS, INFLIGHT, RESPONSES, STATE]) {
+  for (const d of [REQUESTS, INFLIGHT, RESPONSES, ARCHIVE, STATE]) {
     await mkdir(d, { recursive: true });
   }
+}
+
+// Move to archive instead of deleting — avoids macOS Trash prompts
+async function archive(inflightPath, name) {
+  try {
+    await rename(inflightPath, join(ARCHIVE, name));
+  } catch {
+    // ignore — file may already be gone
+  }
+}
+
+// Prune archive when it exceeds 200 files
+async function pruneArchive() {
+  try {
+    const files = (await readdir(ARCHIVE)).sort();
+    if (files.length > 200) {
+      const toRemove = files.slice(0, files.length - 200);
+      await Promise.all(toRemove.map(f => rm(join(ARCHIVE, f), { force: true })));
+    }
+  } catch {}
 }
 
 async function claim() {
@@ -208,7 +229,7 @@ async function handle(name) {
     if (res) {
       pending.delete(request.id);
       await writeFile(join(RESPONSES, name), JSON.stringify(res, null, 2) + '\n');
-      await rm(path, { force: true });
+      await archive(path, name);
       return;
     }
     await new Promise(r => setTimeout(r, 100));
@@ -220,13 +241,15 @@ async function handle(name) {
     result: null,
     error: { message: 'Timeout', code: 'TIMEOUT' }
   }, null, 2) + '\n');
-  await rm(path, { force: true });
+  await archive(path, name);
 }
 
+let pruneCounter = 0;
 async function loop() {
   await ensureDirs();
   while (true) {
     for (const name of await claim()) await handle(name);
+    if (++pruneCounter % 200 === 0) await pruneArchive(); // every ~60s
     await new Promise(r => setTimeout(r, 300));
   }
 }
