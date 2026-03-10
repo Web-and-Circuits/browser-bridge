@@ -55,21 +55,8 @@ process.stdin.on('data', chunk => {
 });
 
 // ── Claude subprocess ──────────────────────────────────────────────────────
-
-const SYSTEM_PROMPT = `You are a browser automation agent. You have bash access to the active Chrome tab via bridge.js.
-
-Commands (run from the working directory):
-  ./bridge.js ping
-  ./bridge.js get_active_tab
-  ./bridge.js snapshot                       # visible text + links
-  ./bridge.js snapshot --selector "<css>"    # scope to a CSS element
-  ./bridge.js snapshot --mode forms          # extract form inputs + labels
-  ./bridge.js run_js "<js expression>"       # evaluate JS in page context
-  ./bridge.js click "<css selector>"         # click element
-  ./bridge.js fill "<css selector>" "<val>"  # set input value
-  ./bridge.js navigate "<url>"               # navigate tab
-
-Always snapshot first to understand the page. Show your work briefly. Be concise.`;
+// Instructions for claude live in CLAUDE.md at the repo root.
+// claude -p reads it automatically when run from REPO_ROOT.
 
 // Parse stream-json events from claude --output-format stream-json
 function handleStreamEvent(id, event, mode) {
@@ -130,7 +117,6 @@ async function handlePrompt({ id, message, mode = 'amnesia', resumeId = null }) 
     '-p', message,
     '--output-format', 'stream-json',
     '--allowedTools', 'Bash',
-    '--system', SYSTEM_PROMPT,
   ];
 
   // Mode determines whether and which session to resume
