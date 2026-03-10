@@ -70,7 +70,15 @@ function connect() {
 
     port.onMessage.addListener(async msg => {
       if (!msg || msg.kind !== 'request' || !msg.request) return;
-      const response = await handleRequest(msg.request);
+      let response;
+      try {
+        response = await handleRequest(msg.request);
+      } catch (err) {
+        response = wrapResponse(msg.request.id, {
+          ok: false,
+          error: { message: err.message, code: 'BACKGROUND_ERROR' }
+        });
+      }
       port.postMessage({ kind: 'response', response });
       broadcast({ kind: 'activity', action: msg.request.action, id: msg.request.id, ok: response.ok });
     });
