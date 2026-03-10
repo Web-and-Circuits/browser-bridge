@@ -1,3 +1,5 @@
+import { stopMatrix } from './matrix.js';
+
 const POLL_MS = 300;
 const DB_NAME = 'browser-bridge';
 const DB_STORE = 'handles';
@@ -77,7 +79,7 @@ function showWelcome() {
 }
 
 function showActive() {
-  if (typeof stopMatrix === 'function') stopMatrix();
+  stopMatrix();
   welcomeEl.style.display = 'none';
   activeEl.classList.add('visible');
 }
