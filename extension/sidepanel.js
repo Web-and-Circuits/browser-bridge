@@ -118,8 +118,12 @@ async function poll() {
     const requestsDir  = await getSubdir(rootHandle, 'requests');
     const responsesDir = await getSubdir(rootHandle, 'responses');
 
-    for await (const [name] of requestsDir) {
-      console.log('[bridge] found:', name);
+    const found = [];
+    for await (const [name] of requestsDir) found.push(name);
+
+    if (found.length) log(`requests/: ${found.join(', ')}`);
+
+    for (const name of found) {
       if (!name.endsWith('.json') || processing.has(name)) continue;
       processing.add(name);
       setStatus('active', 'processing…');
