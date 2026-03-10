@@ -122,7 +122,7 @@ async function poll() {
     const found = [];
     for await (const [name] of requestsDir) found.push(name);
 
-    if (found.length) log(`requests/: ${found.join(', ')}`);
+    log(found.length ? `requests/: ${found.join(', ')}` : 'requests/ (empty)');
 
     for (const name of found) {
       if (!name.endsWith('.json') || processing.has(name)) continue;
