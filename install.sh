@@ -34,14 +34,31 @@ if [[ -z "$NODE_BIN" ]]; then
 fi
 echo "✓ node: $NODE_BIN"
 
+# ── Find claude ────────────────────────────────────────────────────────────
+CLAUDE_BIN="$(command -v claude 2>/dev/null)"
+if [[ -z "$CLAUDE_BIN" ]]; then
+  for p in \
+    "$HOME/.claude/local/claude" \
+    "$HOME/.nvm/versions/node/$(node --version 2>/dev/null)/bin/claude" \
+    /usr/local/bin/claude /opt/homebrew/bin/claude /usr/bin/claude; do
+    [[ -x "$p" ]] && CLAUDE_BIN="$p" && break
+  done
+fi
+if [[ -n "$CLAUDE_BIN" ]]; then
+  echo "✓ claude: $CLAUDE_BIN"
+else
+  echo "⚠ claude CLI not found — sidebar chat will show an error until CLAUDE_PATH is set in host/run.sh"
+fi
+
 BRIDGE_DIR="$SCRIPT_DIR/.bridge"
 
-# ── Write wrapper script (bakes in node path + working dir) ───────────────
+# ── Write wrapper script (bakes in node + claude paths + working dir) ──────
 mkdir -p "$BRIDGE_DIR/state"
 cat > "$WRAPPER" <<EOF
 #!/bin/bash
 cd "$HOST_DIR"
 export BROWSER_BRIDGE_DIR="$BRIDGE_DIR"
+${CLAUDE_BIN:+export CLAUDE_PATH="$CLAUDE_BIN"}
 exec "$NODE_BIN" bridge-host.js 2>>"$BRIDGE_DIR/state/stderr.log"
 EOF
 chmod +x "$WRAPPER"
