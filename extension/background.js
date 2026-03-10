@@ -49,9 +49,22 @@ async function handleRequest(request) {
     });
   }
 
-  if (request.action === 'snapshot' || request.action === 'run_js') {
+  if (request.action === 'snapshot') {
     const response = await chrome.tabs.sendMessage(tab.id, request);
     return wrapResponse(request.id, response);
+  }
+
+  if (request.action === 'run_js') {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      world: 'MAIN',
+      func: code => { try { return { ok: true, value: eval(code) } } catch(e) { return { ok: false, message: e.message } } },
+      args: [request.args?.code || 'null']
+    });
+    const r = results[0]?.result;
+    return r?.ok
+      ? wrapResponse(request.id, { ok: true, result: r.value })
+      : wrapResponse(request.id, { ok: false, error: { message: r?.message || 'eval failed' } });
   }
 
   return wrapResponse(request.id, {

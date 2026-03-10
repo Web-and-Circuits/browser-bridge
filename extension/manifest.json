@@ -4,7 +4,7 @@
   "version": "0.3.0",
   "description": "File-mediated bridge that lets local agents inspect the active tab and run JavaScript.",
   "minimum_chrome_version": "114",
-  "permissions": ["activeTab", "tabs", "sidePanel", "nativeMessaging"],
+  "permissions": ["activeTab", "tabs", "sidePanel", "nativeMessaging", "scripting"],
   "host_permissions": ["<all_urls>"],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
