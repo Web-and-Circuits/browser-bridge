@@ -221,15 +221,30 @@ async function selfTest(root) {
   // cleanup
   try { await root.removeEntry(TEST); } catch {}
 
-  // test: can we read a file written externally by name?
+  // test: seed a file via FSA, wait for external modification, read it back
   try {
-    const reqDir = await root.getDirectoryHandle('requests', { create: false });
-    const extFh  = await reqDir.getFileHandle('req-ping-001.json');
-    const extFile = await extFh.getFile();
-    const extData = await extFile.text();
-    log('external read: ok (' + extData.length + ' bytes)', 'ok');
+    const seed = { seq: 0, source: 'extension' };
+    await writeJson(root, 'inbox.json', seed);
+    const inboxFh = await root.getFileHandle('inbox.json');
+    log('inbox.json seeded — overwrite it to confirm external read', 'ok');
+
+    // poll for up to 15s watching for external modification
+    const deadline = Date.now() + 15000;
+    let detected = false;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 500));
+      const file = await inboxFh.getFile();
+      const data = JSON.parse(await file.text());
+      if (data.seq !== seed.seq) {
+        log('external modify: ok — seq=' + data.seq, 'ok');
+        detected = true;
+        break;
+      }
+    }
+    if (!detected) log('external modify: timeout (15s) — no change detected', 'err');
+    await root.removeEntry('inbox.json').catch(() => {});
   } catch (err) {
-    log('external read: ' + err.message, 'err');
+    log('inbox test: ' + err.message, 'err');
   }
 
   return true;
