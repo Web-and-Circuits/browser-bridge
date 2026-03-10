@@ -10,8 +10,11 @@ const grantBtn    = document.getElementById('grant-btn');
 const welcomeErr  = document.getElementById('welcome-error');
 const dot         = document.getElementById('dot');
 const statusText  = document.getElementById('status-text');
-const resetLink   = document.getElementById('reset-link');
-const logEl       = document.getElementById('log');
+const resetLink      = document.getElementById('reset-link');
+const resetConfirm   = document.getElementById('reset-confirm');
+const resetCancel    = document.getElementById('reset-cancel');
+const resetOk        = document.getElementById('reset-ok');
+const logEl          = document.getElementById('log');
 
 let rootHandle = null;
 let pollTimer  = null;
@@ -188,8 +191,16 @@ grantBtn.addEventListener('click', async () => {
 
 // ── Reset (tucked away in corner) ─────────────────────────────────────────
 
-resetLink.addEventListener('click', async () => {
-  if (!confirm('Clear saved directory and reset?')) return;
+resetLink.addEventListener('click', () => {
+  resetConfirm.classList.add('visible');
+});
+
+resetCancel.addEventListener('click', () => {
+  resetConfirm.classList.remove('visible');
+});
+
+resetOk.addEventListener('click', async () => {
+  resetConfirm.classList.remove('visible');
   clearTimeout(pollTimer);
   await clearHandle();
   rootHandle = null;

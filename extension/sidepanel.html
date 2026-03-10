@@ -114,6 +114,33 @@
   }
   #reset-link:hover { color: #999; }
 
+  #reset-confirm {
+    display: none;
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: #fff;
+    border-top: 1px solid #eee;
+    padding: 12px 14px;
+    font-size: 12px;
+    gap: 10px;
+    align-items: center;
+  }
+  #reset-confirm.visible { display: flex; }
+  #reset-confirm span { flex: 1; color: #555; }
+  #reset-confirm button {
+    padding: 4px 10px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    background: #fff;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  #reset-confirm button.danger {
+    background: #c62828;
+    color: #fff;
+    border-color: #c62828;
+  }
+
   #log {
     flex: 1;
     overflow-y: auto;
@@ -149,6 +176,11 @@
       <span id="reset-link">reset</span>
     </div>
     <div id="log"></div>
+    <div id="reset-confirm">
+      <span>Clear directory and reset?</span>
+      <button id="reset-cancel">Cancel</button>
+      <button id="reset-ok" class="danger">Reset</button>
+    </div>
   </div>
 
   <script src="matrix.js" type="module"></script>

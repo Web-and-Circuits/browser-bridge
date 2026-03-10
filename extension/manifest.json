@@ -3,8 +3,12 @@
   "name": "Browser Bridge",
   "version": "0.2.0",
   "description": "File-mediated bridge that lets local agents inspect the active tab and run JavaScript.",
-  "permissions": ["activeTab", "scripting", "tabs", "sidePanel"],
+  "minimum_chrome_version": "114",
+  "permissions": ["activeTab", "tabs", "sidePanel"],
   "host_permissions": ["<all_urls>"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
   "background": {
     "service_worker": "background.js",
     "type": "module"
