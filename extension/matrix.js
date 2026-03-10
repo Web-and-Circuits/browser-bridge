@@ -42,7 +42,5 @@ requestAnimationFrame(() => {
   new ResizeObserver(initMatrix).observe(canvas);
   drawMatrix();
 
-  setTimeout(() => {
-    document.getElementById('welcome-ui').classList.add('visible');
-  }, 1800);
+
 });
