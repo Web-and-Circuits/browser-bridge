@@ -122,7 +122,7 @@ async function poll() {
     const found = [];
     for await (const [name] of requestsDir) found.push(name);
 
-    log(found.length ? `requests/: ${found.join(', ')}` : 'requests/ (empty)');
+    if (found.length) log(`requests/: ${found.join(', ')}`);
 
     for (const name of found) {
       if (!name.endsWith('.json') || processing.has(name)) continue;
@@ -203,6 +203,17 @@ async function selfTest(root) {
 
   // cleanup
   try { await root.removeEntry(TEST); } catch {}
+
+  // test: can we read a file written externally by name?
+  try {
+    const reqDir = await root.getDirectoryHandle('requests', { create: false });
+    const extFh  = await reqDir.getFileHandle('req-ping-001.json');
+    const extFile = await extFh.getFile();
+    const extData = await extFile.text();
+    log('external read: ok (' + extData.length + ' bytes)', 'ok');
+  } catch (err) {
+    log('external read: ' + err.message, 'err');
+  }
 
   return true;
 }
