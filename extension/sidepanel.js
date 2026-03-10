@@ -86,5 +86,12 @@ chrome.runtime.sendMessage({ kind: 'getStatus' }, response => {
   }
 });
 
+// Show extension ID and install hint on the waiting screen
+const installEl = document.getElementById('waiting-install');
+if (installEl) {
+  const id = chrome.runtime.id;
+  installEl.textContent = `./host/install.sh ${id}\nthen: node ./host/bridge-host.js`;
+}
+
 // fade in waiting UI after matrix has a moment to run
 setTimeout(() => waitingUI.classList.add('visible'), 1800);
