@@ -9,19 +9,54 @@
   body {
     font: 13px/1.5 -apple-system, system-ui, sans-serif;
     color: #222;
-    padding: 14px;
     background: #fff;
   }
-  h1 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
 
-  .status {
+  /* ── Welcome screen ── */
+  #welcome {
+    padding: 32px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  #welcome h1 { font-size: 15px; font-weight: 600; }
+  #welcome p  { font-size: 12px; color: #555; line-height: 1.6; }
+  #welcome code {
+    font-family: ui-monospace, monospace;
+    background: #f4f4f4;
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+  #grant-btn {
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: none;
+    background: #111;
+    color: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    align-self: flex-start;
+  }
+  #grant-btn:hover { background: #333; }
+  #welcome-error { font-size: 11px; color: #c62828; }
+
+  /* ── Active screen ── */
+  #active {
+    display: none;
+    flex-direction: column;
+    height: 100vh;
+  }
+  #active.visible { display: flex; }
+
+  #header {
+    padding: 12px 14px 10px;
+    border-bottom: 1px solid #eee;
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 14px;
   }
   .dot {
-    width: 8px; height: 8px;
+    width: 7px; height: 7px;
     border-radius: 50%;
     background: #ccc;
     flex-shrink: 0;
@@ -30,55 +65,52 @@
   .dot.ready  { background: #4caf50; }
   .dot.active { background: #2196f3; }
   .dot.error  { background: #f44336; }
-
-  #status-text { font-size: 12px; color: #555; }
-
-  button {
-    padding: 7px 12px;
-    border-radius: 7px;
-    border: 1px solid #ccc;
-    background: #fff;
+  #status-text { font-size: 12px; color: #555; flex: 1; }
+  #reset-link {
+    font-size: 10px;
+    color: #bbb;
     cursor: pointer;
-    font-size: 12px;
-    margin-bottom: 14px;
+    text-decoration: underline;
   }
-  button:hover { background: #f5f5f5; }
-
-  #dir-path {
-    font-size: 11px;
-    color: #888;
-    margin-bottom: 14px;
-    word-break: break-all;
-  }
+  #reset-link:hover { color: #888; }
 
   #log {
-    font-size: 11px;
-    font-family: ui-monospace, monospace;
-    color: #444;
-    max-height: 320px;
+    flex: 1;
     overflow-y: auto;
-    border-top: 1px solid #eee;
-    padding-top: 10px;
+    padding: 10px 14px;
     display: flex;
     flex-direction: column;
     gap: 3px;
+    font-size: 11px;
+    font-family: ui-monospace, monospace;
   }
-  .log-entry { color: #666; }
-  .log-entry.ok { color: #2e7d32; }
+  .log-entry     { color: #888; }
+  .log-entry.ok  { color: #2e7d32; }
   .log-entry.err { color: #c62828; }
 </style>
 </head>
 <body>
-  <h1>Browser Bridge</h1>
 
-  <div class="status">
-    <div class="dot" id="dot"></div>
-    <span id="status-text">No directory selected</span>
+  <!-- First-run welcome -->
+  <div id="welcome">
+    <h1>Browser Bridge</h1>
+    <p>
+      Lets a local agent talk to this tab through files on disk.<br>
+      One-time setup: grant read/write access to <code>~/.browser-bridge</code>.
+    </p>
+    <button id="grant-btn">Grant access →</button>
+    <div id="welcome-error"></div>
   </div>
 
-  <button id="pick-btn">Select queue directory</button>
-  <div id="dir-path"></div>
-  <div id="log"></div>
+  <!-- Active state -->
+  <div id="active">
+    <div id="header">
+      <div class="dot" id="dot"></div>
+      <span id="status-text">Starting…</span>
+      <span id="reset-link">reset</span>
+    </div>
+    <div id="log"></div>
+  </div>
 
   <script src="sidepanel.js" type="module"></script>
 </body>
