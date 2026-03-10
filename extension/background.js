@@ -166,7 +166,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return;
   }
   if (msg.kind === 'prompt' && port) {
-    port.postMessage({ kind: 'prompt', id: msg.id, message: msg.message });
+    port.postMessage({ kind: 'prompt', id: msg.id, message: msg.message, mode: msg.mode, resumeId: msg.resumeId });
+  }
+  if (msg.kind === 'reset-session' && port) {
+    port.postMessage({ kind: 'reset-session' });
   }
 });
 

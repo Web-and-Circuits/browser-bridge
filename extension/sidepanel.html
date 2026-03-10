@@ -233,6 +233,70 @@
     color: #bbb;
     animation: blink 1.5s ease-in-out infinite;
   }
+  .claude-stream.tool-call   { color: #555; }
+  .claude-stream.tool-result { color: #999; }
+  .claude-stream.error-text  { color: #c62828; }
+
+  /* ── Mode bar ── */
+  #mode-bar {
+    padding: 6px 10px;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  #mode-pills { display: flex; gap: 4px; }
+  .pill {
+    font: 10px/1 ui-monospace, monospace;
+    padding: 3px 8px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    background: #fff;
+    color: #888;
+    cursor: pointer;
+    letter-spacing: 0.03em;
+  }
+  .pill:hover  { border-color: #aaa; color: #444; }
+  .pill.active { background: #222; border-color: #222; color: #fff; }
+
+  #session-detail {
+    font: 10px/1 ui-monospace, monospace;
+    color: #bbb;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+  }
+  #session-id-val {
+    color: #888;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: all;
+  }
+  #session-id-val:hover { color: #444; }
+  #session-reset {
+    font-size: 12px; line-height: 1;
+    background: none; border: none;
+    color: #ccc; cursor: pointer; padding: 0;
+    flex-shrink: 0;
+  }
+  #session-reset:hover { color: #888; }
+  #terminal-id-input {
+    flex: 1;
+    font: 10px/1 ui-monospace, monospace;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 3px 6px;
+    color: #444;
+    outline: none;
+    min-width: 0;
+  }
+  #terminal-id-input:focus { border-color: #aaa; }
+  #terminal-id-input::placeholder { color: #ccc; }
 </style>
 </head>
 <body>
@@ -269,6 +333,14 @@
         <span class="setup-label">install</span>
         <span class="setup-val selectable" id="install-cmd">—</span>
       </div>
+    </div>
+    <div id="mode-bar">
+      <div id="mode-pills">
+        <button class="pill active" data-mode="amnesia">amnesia</button>
+        <button class="pill" data-mode="session">session</button>
+        <button class="pill" data-mode="terminal">terminal</button>
+      </div>
+      <div id="session-detail"></div>
     </div>
     <div id="log"></div>
     <div id="prompt-bar">

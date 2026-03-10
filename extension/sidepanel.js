@@ -6,13 +6,13 @@ const activeEl   = document.getElementById('active');
 const dot        = document.getElementById('dot');
 const statusText = document.getElementById('status-text');
 const logEl      = document.getElementById('log');
+const modeDetail = document.getElementById('session-detail');
+const promptInput = document.getElementById('prompt-input');
+const promptSend  = document.getElementById('prompt-send');
 
-// ── UI ─────────────────────────────────────────────────────────────────────
+// ── UI helpers ─────────────────────────────────────────────────────────────
 
-function showWaiting() {
-  activeEl.classList.remove('visible');
-  waitingEl.style.display = '';
-}
+function showWaiting() { activeEl.classList.remove('visible'); waitingEl.style.display = ''; }
 
 function showActive() {
   stopMatrix();
@@ -21,9 +21,65 @@ function showActive() {
 }
 
 function setStatus(state, text) {
-  dot.className      = 'dot ' + state;
+  dot.className = 'dot ' + state;
   statusText.textContent = text;
 }
+
+// ── Mode state ─────────────────────────────────────────────────────────────
+
+let mode          = 'amnesia'; // amnesia | session | terminal
+let sessionId     = null;      // current session-mode session ID
+let terminalId    = '';        // pasted terminal session ID
+
+const pills = document.querySelectorAll('.pill');
+
+function renderModeDetail() {
+  modeDetail.innerHTML = '';
+
+  if (mode === 'session') {
+    if (sessionId) {
+      const label = document.createElement('span');
+      label.textContent = 'id:';
+
+      const val = document.createElement('span');
+      val.id = 'session-id-val';
+      val.title = sessionId;
+      val.textContent = sessionId.slice(0, 8) + '…';
+
+      const reset = document.createElement('button');
+      reset.id = 'session-reset';
+      reset.textContent = '×';
+      reset.title = 'clear session (start fresh)';
+      reset.addEventListener('click', () => {
+        sessionId = null;
+        chrome.runtime.sendMessage({ kind: 'reset-session' });
+        renderModeDetail();
+      });
+
+      modeDetail.append(label, val, reset);
+    } else {
+      modeDetail.textContent = 'no session yet';
+    }
+  }
+
+  if (mode === 'terminal') {
+    const input = document.createElement('input');
+    input.id = 'terminal-id-input';
+    input.type = 'text';
+    input.placeholder = 'paste claude session id…';
+    input.value = terminalId;
+    input.addEventListener('input', e => { terminalId = e.target.value.trim(); });
+    modeDetail.appendChild(input);
+  }
+}
+
+pills.forEach(pill => {
+  pill.addEventListener('click', () => {
+    mode = pill.dataset.mode;
+    pills.forEach(p => p.classList.toggle('active', p === pill));
+    renderModeDetail();
+  });
+});
 
 // ── Log ────────────────────────────────────────────────────────────────────
 
@@ -52,28 +108,23 @@ function log(msg, kind = '') {
   while (logEl.children.length > 200) logEl.lastChild.remove();
 }
 
-// ── Background messages ────────────────────────────────────────────────────
-
-let everConnected = false;
-
 function showInstructions() {
   logEl.innerHTML = `
     <div class="instructions">
       <div class="inst-head">how to use</div>
-      <div class="inst-row"><span class="inst-label">1.</span> install &amp; start the host if you haven't — see the install command above</div>
-      <div class="inst-row"><span class="inst-label">2.</span> write a JSON request to <code>.bridge/requests/</code></div>
-      <div class="inst-row"><span class="inst-label">3.</span> responses land in <code>.bridge/responses/</code></div>
-      <div class="inst-head" style="margin-top:12px">actions</div>
-      <div class="inst-row"><code>ping</code> — check the bridge is alive</div>
-      <div class="inst-row"><code>get_active_tab</code> — tab id, title, url</div>
-      <div class="inst-row"><code>snapshot</code> — visible text + links</div>
-      <div class="inst-row"><code>run_js</code> — evaluate JS in the tab</div>
+      <div class="inst-row"><span class="inst-label">1.</span> install &amp; start the host — see command above</div>
+      <div class="inst-row"><span class="inst-label">2.</span> type a task below — claude will act on this tab</div>
+      <div class="inst-row"><span class="inst-label">3.</span> or write JSON to <code>.bridge/requests/</code> directly</div>
+      <div class="inst-head" style="margin-top:10px">modes</div>
+      <div class="inst-row"><code>amnesia</code> — fresh context each prompt</div>
+      <div class="inst-row"><code>session</code> — sidebar keeps a persistent conversation</div>
+      <div class="inst-row"><code>terminal</code> — paste a session id to sync with a running claude</div>
     </div>`;
 }
 
 // ── Stream rendering ───────────────────────────────────────────────────────
 
-const streams = new Map(); // id → { block, streamEl, thinkingEl }
+const streams = new Map();
 
 function startStream(id, userMsg) {
   if (logEl.querySelector('.instructions')) logEl.innerHTML = '';
@@ -88,29 +139,47 @@ function startStream(id, userMsg) {
 
   const thinking = document.createElement('div');
   thinking.className = 'claude-thinking';
-  thinking.textContent = 'claude is thinking…';
+  thinking.textContent = 'thinking…';
   block.appendChild(thinking);
 
   logEl.prepend(block);
-
-  streams.set(id, { block, thinkingEl: thinking, streamEl: null });
+  streams.set(id, { block, thinkingEl: thinking, segments: new Map() });
 }
 
-function appendStream(id, chunk, dim = false) {
+function appendStream(id, chunk, streamType = 'text') {
   const s = streams.get(id);
   if (!s) return;
 
   if (s.thinkingEl) {
     s.thinkingEl.remove();
     s.thinkingEl = null;
-    const streamEl = document.createElement('div');
-    streamEl.className = 'claude-stream' + (dim ? ' dim' : '');
-    s.block.appendChild(streamEl);
-    s.streamEl = streamEl;
   }
 
-  s.streamEl.textContent += chunk;
-  s.streamEl.scrollIntoView({ block: 'nearest' });
+  // Each streamType gets its own segment element so they can be styled separately
+  if (!s.segments.has(streamType)) {
+    const seg = document.createElement('div');
+    const cls = { text: '', 'tool-call': 'tool-call', 'tool-result': 'tool-result', error: 'error-text' };
+    seg.className = 'claude-stream ' + (cls[streamType] || '');
+    s.block.appendChild(seg);
+    s.segments.set(streamType, seg);
+  }
+
+  // New segment if previous streamType was different (interleaved tool calls/text)
+  const existing = s.segments.get(streamType);
+  // Append a fresh segment if content type just switched (tool-call → text etc.)
+  const lastSeg = s.block.lastElementChild;
+  if (lastSeg && !lastSeg.classList.contains(streamType === 'text' ? 'claude-stream' : `claude-stream`) || lastSeg?.className.includes('tool-call') && streamType === 'text') {
+    const seg = document.createElement('div');
+    const cls = { text: '', 'tool-call': 'tool-call', 'tool-result': 'tool-result', error: 'error-text' };
+    seg.className = 'claude-stream ' + (cls[streamType] || '');
+    s.block.appendChild(seg);
+    s.segments.set(streamType + '_' + s.block.children.length, seg);
+    seg.textContent += chunk;
+  } else {
+    existing.textContent += chunk;
+  }
+
+  s.block.scrollIntoView({ block: 'nearest' });
 }
 
 function endStream(id, ok) {
@@ -118,9 +187,7 @@ function endStream(id, ok) {
   if (!s) return;
   if (s.thinkingEl) {
     s.thinkingEl.textContent = ok ? '(no output)' : '(failed)';
-  }
-  if (s.streamEl && !ok) {
-    s.streamEl.classList.add('error');
+    s.thinkingEl.style.animationName = 'none';
   }
   streams.delete(id);
   setStatus('connected', 'connected');
@@ -128,19 +195,24 @@ function endStream(id, ok) {
 
 // ── Prompt submit ──────────────────────────────────────────────────────────
 
-const promptInput = document.getElementById('prompt-input');
-const promptSend  = document.getElementById('prompt-send');
-
 function submitPrompt() {
   const message = promptInput.value.trim();
   if (!message) return;
+
   const id = crypto.randomUUID();
   promptInput.value = '';
   promptInput.style.height = '';
   promptSend.disabled = true;
   setStatus('active', 'claude');
   startStream(id, message);
-  chrome.runtime.sendMessage({ kind: 'prompt', id, message });
+
+  chrome.runtime.sendMessage({
+    kind: 'prompt',
+    id,
+    message,
+    mode,
+    resumeId: mode === 'terminal' ? terminalId : null
+  });
 }
 
 promptSend.addEventListener('click', submitPrompt);
@@ -156,22 +228,6 @@ promptInput.addEventListener('input', () => {
 
 let everConnected = false;
 
-function showInstructions() {
-  logEl.innerHTML = `
-    <div class="instructions">
-      <div class="inst-head">how to use</div>
-      <div class="inst-row"><span class="inst-label">1.</span> install &amp; start the host if you haven't — see the install command above</div>
-      <div class="inst-row"><span class="inst-label">2.</span> type a task below to run claude on this page</div>
-      <div class="inst-row"><span class="inst-label">3.</span> or write JSON requests directly to <code>.bridge/requests/</code></div>
-      <div class="inst-head" style="margin-top:12px">actions</div>
-      <div class="inst-row"><code>ping</code> — check the bridge is alive</div>
-      <div class="inst-row"><code>get_active_tab</code> — tab id, title, url</div>
-      <div class="inst-row"><code>snapshot</code> — visible text + links</div>
-      <div class="inst-row"><code>run_js</code> — evaluate JS in the tab</div>
-      <div class="inst-row"><code>click</code> · <code>fill</code> · <code>navigate</code> — act on page</div>
-    </div>`;
-}
-
 chrome.runtime.onMessage.addListener(msg => {
   if (msg.kind === 'status') {
     if (msg.connected) {
@@ -181,22 +237,29 @@ chrome.runtime.onMessage.addListener(msg => {
         showInstructions();
       }
       setStatus('connected', 'connected');
+      promptSend.disabled = false;
     } else {
       setStatus('disconnected', 'host disconnected — retrying…');
-      promptSend.disabled = false;
+      promptSend.disabled = true;
     }
   }
 
   if (msg.kind === 'activity') {
     if (logEl.querySelector('.instructions')) logEl.innerHTML = '';
-    const label = msg.action + ' → ' + (msg.ok ? 'ok' : 'err');
-    log(label, msg.ok ? 'ok' : 'err');
+    log(msg.action + ' → ' + (msg.ok ? 'ok' : 'err'), msg.ok ? 'ok' : 'err');
     setStatus('active', msg.action);
     setTimeout(() => setStatus('connected', 'connected'), 800);
   }
 
   if (msg.kind === 'stream') {
-    appendStream(msg.id, msg.chunk, msg.dim);
+    appendStream(msg.id, msg.chunk, msg.streamType || 'text');
+  }
+
+  if (msg.kind === 'session-id') {
+    if (mode === 'session' && !sessionId) {
+      sessionId = msg.sessionId;
+      renderModeDetail();
+    }
   }
 
   if (msg.kind === 'stream-end') {
@@ -219,14 +282,9 @@ chrome.runtime.sendMessage({ kind: 'getStatus' }, response => {
   }
 });
 
-// Populate extension ID and install command in both screens
-const id = chrome.runtime.id;
-const cmdEl = document.getElementById('waiting-cmd');
-if (cmdEl) cmdEl.textContent = `./install.sh ${id}`;
-const extIdEl = document.getElementById('ext-id');
-if (extIdEl) extIdEl.textContent = id;
-const installCmdEl = document.getElementById('install-cmd');
-if (installCmdEl) installCmdEl.textContent = `./install.sh ${id}`;
+const extId = chrome.runtime.id;
+document.getElementById('waiting-cmd').textContent  = `./install.sh ${extId}`;
+document.getElementById('ext-id').textContent       = extId;
+document.getElementById('install-cmd').textContent  = `./install.sh ${extId}`;
 
-// fade in waiting UI after matrix has a moment to run
 setTimeout(() => waitingUI.classList.add('visible'), 1800);

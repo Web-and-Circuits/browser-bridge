@@ -10,11 +10,12 @@ const REQUESTS  = join(ROOT, 'requests');
 const INFLIGHT  = join(ROOT, 'requests-inflight');
 const RESPONSES = join(ROOT, 'responses');
 const STATE     = join(ROOT, 'state');
-const REPO_ROOT = dirname(ROOT); // .bridge is inside the repo root
+const REPO_ROOT = dirname(ROOT); // .bridge lives inside the repo
 
 let buf = Buffer.alloc(0);
 const pending = new Map();
-let promptRunning = false;
+let promptRunning  = false;
+let currentSession = null; // session-mode session ID
 
 // ── Native messaging framing ───────────────────────────────────────────────
 
@@ -25,7 +26,7 @@ function send(msg) {
   process.stdout.write(Buffer.concat([hdr, json]));
 }
 
-// ── Stdin (messages from extension) ───────────────────────────────────────
+// ── Stdin ──────────────────────────────────────────────────────────────────
 
 process.stdin.on('data', chunk => {
   buf = Buffer.concat([buf, chunk]);
@@ -40,37 +41,85 @@ process.stdin.on('data', chunk => {
         pending.set(msg.response.id, msg.response);
       }
       if (msg.kind === 'prompt') {
-        handlePrompt(msg.message, msg.id).catch(err => {
-          send({ kind: 'stream-end', id: msg.id, ok: false, error: err.message });
+        handlePrompt(msg).catch(err => {
+          send({ kind: 'stream', id: msg.id, chunk: '\n[error] ' + err.message + '\n', streamType: 'error' });
+          send({ kind: 'stream-end', id: msg.id, ok: false });
+          promptRunning = false;
         });
+      }
+      if (msg.kind === 'reset-session') {
+        currentSession = null;
       }
     } catch {}
   }
 });
 
-// ── Prompt → claude subprocess ─────────────────────────────────────────────
+// ── Claude subprocess ──────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are a browser automation agent with bash access to the active Chrome tab.
+const SYSTEM_PROMPT = `You are a browser automation agent. You have bash access to the active Chrome tab via bridge.js.
 
-Bridge commands (run from ${REPO_ROOT}):
+Commands (run from the working directory):
   ./bridge.js ping
   ./bridge.js get_active_tab
-  ./bridge.js snapshot                      # visible text + links
-  ./bridge.js snapshot --selector "<css>"   # scope to element
-  ./bridge.js snapshot --mode forms         # extract inputs/labels
-  ./bridge.js run_js "<expression>"         # evaluate JS in page
-  ./bridge.js click "<selector>"            # click element
-  ./bridge.js fill "<selector>" "<value>"   # set input value
-  ./bridge.js navigate "<url>"              # navigate tab
+  ./bridge.js snapshot                       # visible text + links
+  ./bridge.js snapshot --selector "<css>"    # scope to a CSS element
+  ./bridge.js snapshot --mode forms          # extract form inputs + labels
+  ./bridge.js run_js "<js expression>"       # evaluate JS in page context
+  ./bridge.js click "<css selector>"         # click element
+  ./bridge.js fill "<css selector>" "<val>"  # set input value
+  ./bridge.js navigate "<url>"               # navigate tab
 
-Rules:
-- Start by snapshotting the page to understand current state.
-- Print what you're doing before each command.
-- Be concise. Show your work. Complete the task.`;
+Always snapshot first to understand the page. Show your work briefly. Be concise.`;
 
-async function handlePrompt(message, id) {
+// Parse stream-json events from claude --output-format stream-json
+function handleStreamEvent(id, event, mode) {
+  switch (event.type) {
+    case 'system':
+      if (event.session_id) {
+        if (mode === 'session') currentSession = event.session_id;
+        send({ kind: 'session-id', id, sessionId: event.session_id });
+      }
+      break;
+
+    case 'assistant': {
+      const content = event.message?.content || [];
+      for (const block of content) {
+        if (block.type === 'text' && block.text) {
+          send({ kind: 'stream', id, chunk: block.text, streamType: 'text' });
+        }
+        if (block.type === 'tool_use') {
+          const cmd = block.input?.command || `[${block.name}]`;
+          send({ kind: 'stream', id, chunk: '$ ' + cmd + '\n', streamType: 'tool-call' });
+        }
+      }
+      break;
+    }
+
+    case 'user': {
+      const content = event.message?.content || [];
+      for (const block of content) {
+        if (block.type === 'tool_result') {
+          const text = typeof block.content === 'string'
+            ? block.content
+            : JSON.stringify(block.content, null, 2);
+          if (text) send({ kind: 'stream', id, chunk: text.slice(0, 3000) + '\n', streamType: 'tool-result' });
+        }
+      }
+      break;
+    }
+
+    case 'result':
+      if (event.session_id) {
+        if (mode === 'session') currentSession = event.session_id;
+        send({ kind: 'session-id', id, sessionId: event.session_id });
+      }
+      break;
+  }
+}
+
+async function handlePrompt({ id, message, mode = 'amnesia', resumeId = null }) {
   if (promptRunning) {
-    send({ kind: 'stream', id, chunk: '[busy — another prompt is running]\n' });
+    send({ kind: 'stream', id, chunk: '[busy — another prompt is running]\n', streamType: 'error' });
     send({ kind: 'stream-end', id, ok: false });
     return;
   }
@@ -79,9 +128,18 @@ async function handlePrompt(message, id) {
   const claudeBin = process.env.CLAUDE_PATH || 'claude';
   const args = [
     '-p', message,
+    '--output-format', 'stream-json',
     '--allowedTools', 'Bash',
     '--system', SYSTEM_PROMPT,
   ];
+
+  // Mode determines whether and which session to resume
+  if (mode === 'session' && currentSession) {
+    args.push('--resume', currentSession);
+  } else if (mode === 'terminal' && resumeId) {
+    args.push('--resume', resumeId);
+  }
+  // amnesia: no --resume
 
   const proc = spawn(claudeBin, args, {
     cwd: REPO_ROOT,
@@ -89,26 +147,41 @@ async function handlePrompt(message, id) {
     stdio: ['ignore', 'pipe', 'pipe']
   });
 
+  let lineBuf = '';
+
+  function flushLine(line) {
+    if (!line.trim()) return;
+    try {
+      handleStreamEvent(id, JSON.parse(line), mode);
+    } catch {
+      // Not JSON — pass through as raw text
+      send({ kind: 'stream', id, chunk: line + '\n', streamType: 'text' });
+    }
+  }
+
   proc.stdout.on('data', chunk => {
-    send({ kind: 'stream', id, chunk: chunk.toString() });
+    lineBuf += chunk.toString();
+    const lines = lineBuf.split('\n');
+    lineBuf = lines.pop();
+    for (const line of lines) flushLine(line);
   });
 
   proc.stderr.on('data', chunk => {
-    // surface stderr as a dim prefix so it's visible but distinct
-    send({ kind: 'stream', id, chunk: '[err] ' + chunk.toString(), dim: true });
+    send({ kind: 'stream', id, chunk: chunk.toString(), streamType: 'error' });
   });
 
   proc.on('close', code => {
+    if (lineBuf) flushLine(lineBuf);
     promptRunning = false;
     send({ kind: 'stream-end', id, ok: code === 0 });
   });
 
   proc.on('error', err => {
     promptRunning = false;
-    const hint = err.code === 'ENOENT'
-      ? `\n\nclaude CLI not found. Install it or set CLAUDE_PATH in host/run.sh.\n`
-      : '\n\n' + err.message + '\n';
-    send({ kind: 'stream', id, chunk: hint });
+    const msg = err.code === 'ENOENT'
+      ? 'claude CLI not found. Install it or set CLAUDE_PATH in host/run.sh.\n'
+      : err.message + '\n';
+    send({ kind: 'stream', id, chunk: msg, streamType: 'error' });
     send({ kind: 'stream-end', id, ok: false });
   });
 }
