@@ -116,6 +116,7 @@ async function handlePrompt({ id, message, mode = 'amnesia', resumeId = null }) 
   const args = [
     '-p', message,
     '--output-format', 'stream-json',
+    '--verbose',
     '--allowedTools', 'Bash',
   ];
 
