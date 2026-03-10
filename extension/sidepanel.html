@@ -55,6 +55,17 @@
     text-transform: uppercase;
     opacity: 0.7;
   }
+  #welcome-hint {
+    font-family: ui-monospace, monospace;
+    font-size: 10px;
+    color: #00ff41;
+    opacity: 0.45;
+    text-align: center;
+    line-height: 1.6;
+  }
+  #welcome-hint code {
+    opacity: 0.9;
+  }
 
   #grant-btn {
     padding: 11px 28px;
@@ -163,6 +174,7 @@
     <canvas id="matrix-canvas"></canvas>
     <div id="welcome-ui">
       <div id="welcome-title">browser bridge</div>
+      <div id="welcome-hint">select your <code>~/.browser-bridge</code> folder — once, never again</div>
       <button id="grant-btn">Let's begin</button>
       <div id="welcome-error"></div>
     </div>
